@@ -8,6 +8,7 @@ const MODULES = [
   ['RRHH', 'RR. HH.'],
   ['SOPORTE', 'Soporte'],
   ['COMERCIAL', 'Comercial'],
+  ['DST', 'DST'],
 ];
 
 let _users = [];

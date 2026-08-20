@@ -94,14 +94,14 @@ function showBootError() {
 }
 
 function isAuthorized(user) {
-  return (user?.nivel_acceso || 0) >= 100 && (user?.authorized_modules || []).includes('DST');
+  return (user?.authorized_modules || []).includes('DST');
 }
 
 (async function init() {
-  /* Gate de acceso: DST es un panel sensible, así que además del token
-     se revalida en el cliente (defensa en profundidad) que la cuenta
-     sea privilegiada — el backend igual rechaza con 403 cualquier
-     endpoint /api/security/* si esto llegara a fallar. */
+  /* Gate de acceso: se revalida en el cliente (defensa en profundidad)
+     que la cuenta tenga el módulo DST autorizado — el backend igual
+     rechaza con 403 cualquier endpoint /api/security/* si esto
+     llegara a fallar. */
   if (!localStorage.getItem('dst_token')) {
     window.location.href = 'login.html';
     return;

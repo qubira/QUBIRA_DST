@@ -47,8 +47,11 @@
 
 /* Igual que en los demás paneles: el único login de credenciales vive
    en LOGIN/login.html. Esta página solo recibe el traspaso de un solo
-   uso o revalida el token local — y, además, exige que la cuenta sea
-   privilegiada (nivel_acceso>=100), porque DST es un panel sensible. */
+   uso o revalida el token local. DST es un módulo más: el backend ya
+   solo incluye 'DST' en authorized_modules si la cuenta es
+   nivel_acceso>=100 o si un admin se lo otorgó explícitamente desde
+   Permisos — por eso alcanza con revisar authorized_modules, sin
+   duplicar esa regla acá. */
 
 const QD_API_BASE = (location.hostname === 'localhost' || location.hostname === '127.0.0.1')
   ? 'http://localhost:4000'
@@ -67,7 +70,7 @@ function showError(msg) {
 }
 
 function isAuthorized(user) {
-  return (user.nivel_acceso || 0) >= 100 && (user.authorized_modules || []).includes('DST');
+  return (user.authorized_modules || []).includes('DST');
 }
 
 async function exchangeHandoff(code) {
@@ -78,7 +81,7 @@ async function exchangeHandoff(code) {
     });
     const data = await res.json();
     if (!res.ok || !data.ok) { showError(data.error || 'El enlace de acceso venció o ya se usó.'); return; }
-    if (!isAuthorized(data.user)) { showError('Tu cuenta no tiene privilegios de administrador.'); return; }
+    if (!isAuthorized(data.user)) { showError('Tu cuenta no tiene acceso al módulo DST. Pide que te lo otorguen desde Permisos.'); return; }
 
     localStorage.setItem('dst_token', data.token);
     localStorage.setItem('dst_user', JSON.stringify(data.user));
@@ -99,7 +102,7 @@ async function checkExistingSession() {
     const data = await res.json();
     if (!isAuthorized(data.user)) {
       localStorage.removeItem('dst_token'); localStorage.removeItem('dst_user');
-      showError('Tu cuenta no tiene privilegios de administrador.');
+      showError('Tu cuenta no tiene acceso al módulo DST. Pide que te lo otorguen desde Permisos.');
       return;
     }
     localStorage.setItem('dst_user', JSON.stringify(data.user));
