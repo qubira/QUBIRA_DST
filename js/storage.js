@@ -50,6 +50,7 @@ export const Store = {
   // Sesiones
   getSessions: () => qdFetch('/api/security/sessions'),
   revokeSession: (id) => qdFetch(`/api/security/sessions/${id}`, { method: 'DELETE' }),
+  revokeAllSessions: (userId) => qdFetch(`/api/security/sessions/by-user/${userId}`, { method: 'DELETE' }),
   getLoginHistory: (username, days) => qdFetch(`/api/security/login-history/${encodeURIComponent(username)}` + qs({ days })),
 
   // IP

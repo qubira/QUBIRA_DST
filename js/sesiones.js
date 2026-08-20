@@ -3,6 +3,7 @@ import { icon, escapeHtml, formatDateTime, formatDateTimeSec } from './utils.js'
 import { confirmDialog, toast } from './ui.js';
 
 let _all = [];       // una fila por usuario (su sesión más reciente)
+let _countByUser = new Map(); // usuario_id -> cantidad total de sesiones activas (todas las áreas)
 let _filters = { q: '', area: '' };
 let _expanded = null;      // usuario_id actualmente expandido, o null
 let _historyCache = new Map(); // username -> rows (evita repetir la consulta al reabrir)
@@ -52,9 +53,16 @@ async function load() {
   try {
     const data = await Store.getSessions();
     // Una fila por usuario: la de mayor created_at (backend ya ordena DESC).
+    // Cada panel (TI/ADG/RRHH/Soporte/DST) genera su propia fila en
+    // `sesiones` al entrar — una persona puede tener varias sesiones
+    // activas al mismo tiempo sin tener varias pestañas abiertas ahora
+    // mismo, así que se cuenta el total real por usuario para poder
+    // ofrecer "cerrar todas" cuando corresponde.
     const seen = new Set();
     _all = [];
+    _countByUser = new Map();
     for (const s of data.rows) {
+      _countByUser.set(s.usuario_id, (_countByUser.get(s.usuario_id) || 0) + 1);
       if (seen.has(s.usuario_id)) continue;
       seen.add(s.usuario_id);
       _all.push(s);
@@ -109,16 +117,24 @@ function renderTable() {
   wrap.querySelectorAll('[data-revoke]').forEach(btn => {
     btn.addEventListener('click', (e) => { e.stopPropagation(); revoke(Number(btn.dataset.revoke)); });
   });
+  wrap.querySelectorAll('[data-revoke-all]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      revokeAll(Number(btn.dataset.revokeAll), btn.dataset.username, Number(btn.dataset.count));
+    });
+  });
   wireHistoryDaysSelect();
 }
 
 function rowHtml(s) {
   const isOpen = _expanded === s.usuario_id;
+  const total = _countByUser.get(s.usuario_id) || 1;
   return `
   <tr>
     <td class="cell-main ses-user-cell" data-toggle-history="${s.usuario_id}" data-username="${escapeHtml(s.username)}" title="Ver historial de logeo por día">
       <span class="ses-chevron ${isOpen ? 'open' : ''}">▸</span>
       ${escapeHtml(`${s.nombre} ${s.apellidos || ''}`.trim())} <span class="cell-sub">(${escapeHtml(s.username)})</span>
+      ${total > 1 ? `<br><span style="font-size:11px;color:var(--text-muted)">${total} sesiones activas en distintos paneles</span>` : ''}
     </td>
     <td class="cell-sub">${escapeHtml(s.ip_address || '—')}</td>
     <td class="cell-sub" title="${escapeHtml(s.user_agent || '')}">${escapeHtml((s.user_agent || '—').slice(0, 40))}</td>
@@ -128,7 +144,10 @@ function rowHtml(s) {
       <br><span style="font-size:11px;color:var(--text-muted)">${escapeHtml(friendlyPage(s.ultima_pagina))}</span>
     </td>
     <td class="cell-sub">${formatDateTime(s.expires_at)}</td>
-    <td><button class="btn btn-danger btn-sm" data-revoke="${s.id}">${icon('log-out')} Cerrar</button></td>
+    <td style="white-space:nowrap">
+      <button class="btn btn-danger btn-sm" data-revoke="${s.id}">${icon('log-out')} Cerrar</button>
+      ${total > 1 ? `<button class="btn btn-secondary btn-sm" data-revoke-all="${s.usuario_id}" data-username="${escapeHtml(s.username)}" data-count="${total}">Cerrar todas (${total})</button>` : ''}
+    </td>
   </tr>
   ${isOpen ? `<tr class="ses-detail-row"><td colspan="7">${historyPanelHtml(s)}</td></tr>` : ''}
   `;
@@ -239,4 +258,14 @@ async function revoke(sessionId) {
     toast('Sesión cerrada', 'success');
     load();
   } catch (err) { toast(err.message || 'No se pudo cerrar la sesión', 'error'); }
+}
+
+async function revokeAll(usuarioId, username, count) {
+  const ok = await confirmDialog(`¿Confirmas cerrar las ${count} sesiones activas de ${escapeHtml(username)} en todas las áreas? Quedará desconectado de todos los paneles donde tenga sesión abierta.`, { title: 'Cerrar todas las sesiones', confirmLabel: 'Cerrar todas' });
+  if (!ok) return;
+  try {
+    await Store.revokeAllSessions(usuarioId);
+    toast('Sesiones cerradas en todas las áreas', 'success');
+    load();
+  } catch (err) { toast(err.message || 'No se pudieron cerrar las sesiones', 'error'); }
 }

@@ -24,7 +24,7 @@ function kpiHtml(d) {
         <div>
           <div class="kpi-card__label">Sesiones activas</div>
           <div class="kpi-card__value">${d.sesiones_activas}</div>
-          <div class="kpi-card__hint">en todos los paneles</div>
+          <div class="kpi-card__hint">de ${d.sesiones_activas_usuarios} persona${d.sesiones_activas_usuarios === 1 ? '' : 's'} — un panel visitado = una sesión</div>
         </div>
         <div class="kpi-card__icon blue">${icon('clock')}</div>
       </div>
@@ -114,6 +114,19 @@ async function refreshKpiDetail(kind, body) {
       } catch (err) { toast(err.message || 'No se pudo cerrar la sesión', 'error'); }
     });
   });
+  body.querySelectorAll('[data-revoke-all-modal]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const count = btn.dataset.count;
+      const ok = await confirmDialog(`¿Confirmas cerrar las ${count} sesiones activas de esta persona en todas las áreas?`, { title: 'Cerrar todas las sesiones', confirmLabel: 'Cerrar todas' });
+      if (!ok) return;
+      try {
+        await Store.revokeAllSessions(Number(btn.dataset.revokeAllModal));
+        toast('Sesiones cerradas en todas las áreas', 'success');
+        await refreshKpiDetail(kind, body);
+        renderDashboard();
+      } catch (err) { toast(err.message || 'No se pudieron cerrar las sesiones', 'error'); }
+    });
+  });
 }
 
 function detailTable(headers, rows, emptyMsg) {
@@ -132,15 +145,25 @@ async function kpiDetailHtml(kind) {
 
   if (kind === 'sesiones_activas') {
     const data = await Store.getSessions();
+    const countByUser = new Map();
+    data.rows.forEach(s => countByUser.set(s.usuario_id, (countByUser.get(s.usuario_id) || 0) + 1));
     const seen = new Set();
     const rows = data.rows.filter(s => (seen.has(s.usuario_id) ? false : (seen.add(s.usuario_id), true)))
-      .map(s => `<tr>
-        <td class="cell-main">${escapeHtml(`${s.nombre} ${s.apellidos || ''}`.trim())} <span class="cell-sub">(${escapeHtml(s.username)})</span></td>
+      .map(s => {
+        const total = countByUser.get(s.usuario_id) || 1;
+        return `<tr>
+        <td class="cell-main">${escapeHtml(`${s.nombre} ${s.apellidos || ''}`.trim())} <span class="cell-sub">(${escapeHtml(s.username)})</span>
+          ${total > 1 ? `<br><span style="font-size:11px;color:var(--text-muted)">${total} sesiones en distintos paneles</span>` : ''}
+        </td>
         <td class="cell-sub">${escapeHtml(s.area || '—')}</td>
         <td class="cell-sub">${escapeHtml(s.ip_address || '—')}</td>
         <td class="cell-sub">${s.ultima_actividad ? formatDateTime(s.ultima_actividad) : '—'}</td>
-        <td><button class="btn btn-danger btn-sm" data-revoke-modal="${s.id}">${icon('log-out')} Cerrar</button></td>
-      </tr>`);
+        <td style="white-space:nowrap">
+          <button class="btn btn-danger btn-sm" data-revoke-modal="${s.id}">${icon('log-out')} Cerrar</button>
+          ${total > 1 ? `<button class="btn btn-secondary btn-sm" data-revoke-all-modal="${s.usuario_id}" data-count="${total}">Cerrar todas (${total})</button>` : ''}
+        </td>
+      </tr>`;
+      });
     return detailTable(['Usuario', 'Área', 'IP', 'Última actividad', ''], rows, 'Sin sesiones activas.');
   }
 
