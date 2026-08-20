@@ -92,11 +92,28 @@ function wireKpiCards() {
 async function openKpiDetail(kind) {
   const modal = openModal({ title: KPI_DETAIL_TITLES[kind] || 'Detalle', size: 'lg', bodyHtml: '<p style="font-size:12.5px;color:var(--text-muted)">Cargando…</p>' });
   const body = modal.querySelector('.modal__body');
+  await refreshKpiDetail(kind, body);
+}
+
+async function refreshKpiDetail(kind, body) {
   try {
     body.innerHTML = await kpiDetailHtml(kind);
   } catch (err) {
     body.innerHTML = `<p style="color:var(--danger);font-size:12.5px">${escapeHtml(err.message || 'No se pudo cargar el detalle')}</p>`;
+    return;
   }
+  body.querySelectorAll('[data-revoke-modal]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const ok = await confirmDialog('¿Confirmas cerrar esta sesión? La persona quedará desconectada de inmediato en ese panel.', { title: 'Cerrar sesión', confirmLabel: 'Cerrar sesión' });
+      if (!ok) return;
+      try {
+        await Store.revokeSession(Number(btn.dataset.revokeModal));
+        toast('Sesión cerrada', 'success');
+        await refreshKpiDetail(kind, body);
+        renderDashboard();
+      } catch (err) { toast(err.message || 'No se pudo cerrar la sesión', 'error'); }
+    });
+  });
 }
 
 function detailTable(headers, rows, emptyMsg) {
@@ -122,8 +139,9 @@ async function kpiDetailHtml(kind) {
         <td class="cell-sub">${escapeHtml(s.area || '—')}</td>
         <td class="cell-sub">${escapeHtml(s.ip_address || '—')}</td>
         <td class="cell-sub">${s.ultima_actividad ? formatDateTime(s.ultima_actividad) : '—'}</td>
+        <td><button class="btn btn-danger btn-sm" data-revoke-modal="${s.id}">${icon('log-out')} Cerrar</button></td>
       </tr>`);
-    return detailTable(['Usuario', 'Área', 'IP', 'Última actividad'], rows, 'Sin sesiones activas.');
+    return detailTable(['Usuario', 'Área', 'IP', 'Última actividad', ''], rows, 'Sin sesiones activas.');
   }
 
   if (kind === 'logins_hoy') {
