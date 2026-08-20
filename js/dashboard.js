@@ -217,11 +217,16 @@ async function kpiDetailHtml(kind) {
 
 function chartsHtml(d) {
   const areas = d.sessions_by_area || [];
-  const legend = areas.map((a, i) => `
-    <div style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-muted)">
-      <span style="width:9px;height:9px;border-radius:50%;background:${DONUT_COLORS[i % DONUT_COLORS.length]};display:inline-block"></span>
-      ${escapeHtml(a.area)} (${a.n})
-    </div>`).join('');
+  const areasTotal = areas.reduce((sum, a) => sum + a.n, 0);
+  const legend = areas.map((a, i) => {
+    const pct = areasTotal ? Math.round((a.n / areasTotal) * 100) : 0;
+    return `
+    <div style="display:flex;align-items:center;gap:8px;font-size:12.5px;padding:5px 0;min-width:150px">
+      <span style="width:10px;height:10px;border-radius:50%;background:${DONUT_COLORS[i % DONUT_COLORS.length]};flex-shrink:0"></span>
+      <span style="color:var(--text);flex:1">${escapeHtml(a.area)}</span>
+      <span style="color:var(--text-muted);font-variant-numeric:tabular-nums">${a.n} · ${pct}%</span>
+    </div>`;
+  }).join('');
 
   return `
     <div class="panels-grid">

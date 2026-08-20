@@ -68,32 +68,34 @@ export function singleBarChart(data, { key, color, width = 560, height = 130 } =
 }
 
 /* Gráfico de dona simple (ej. sesiones activas por área). `data` es
-   un array de {label, value}. */
-export function donutChart(data, { size = 150, colors = [] } = {}) {
+   un array de {label, value}. Se arma con conic-gradient (CSS) en vez
+   de un truco de stroke-dasharray sobre un <circle> — ese enfoque se
+   veía como un octágono facetado en vez de un círculo liso; con
+   conic-gradient el navegador dibuja el círculo de forma nativa. */
+export function donutChart(data, { size = 150, colors = [], holeLabel = 'sesiones' } = {}) {
   const total = data.reduce((sum, d) => sum + d.value, 0);
-  const cx = size / 2, cy = size / 2, r = size / 2 - 8, strokeW = size * 0.22;
-  if (total === 0) {
-    return `<svg viewBox="0 0 ${size} ${size}" width="${size}" height="${size}">
-      <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="var(--border)" stroke-width="${strokeW}"/>
-    </svg>`;
+  const holeSize = Math.round(size * 0.6);
+  const holeInset = Math.round((size - holeSize) / 2);
+
+  let background = 'var(--gray-bg)';
+  if (total > 0) {
+    let acc = 0;
+    const stops = data.map((d, i) => {
+      const start = (acc / total) * 360;
+      acc += d.value;
+      const end = (acc / total) * 360;
+      return `${colors[i % colors.length]} ${start}deg ${end}deg`;
+    });
+    background = `conic-gradient(${stops.join(', ')})`;
   }
-  let angle = -90;
-  const circumference = 2 * Math.PI * r;
-  let arcs = '';
-  data.forEach((d, i) => {
-    const frac = d.value / total;
-    const dash = frac * circumference;
-    const gap = circumference - dash;
-    const color = colors[i % colors.length];
-    arcs += `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${color}" stroke-width="${strokeW}"
-      stroke-dasharray="${dash} ${gap}" stroke-dashoffset="${-((angle + 90) / 360) * circumference}"
-      transform="rotate(-90 ${cx} ${cy})"><title>${d.label}: ${d.value}</title></circle>`;
-    angle += frac * 360;
-  });
-  return `<svg viewBox="0 0 ${size} ${size}" width="${size}" height="${size}">${arcs}
-    <text x="${cx}" y="${cy - 3}" text-anchor="middle" font-size="18" font-weight="700" fill="var(--text)">${total}</text>
-    <text x="${cx}" y="${cy + 13}" text-anchor="middle" font-size="9" fill="var(--text-muted)">sesiones</text>
-  </svg>`;
+
+  return `
+    <div style="position:relative;width:${size}px;height:${size}px;border-radius:50%;background:${background};flex-shrink:0;box-shadow:0 1px 3px rgba(0,0,0,.08)">
+      <div style="position:absolute;inset:${holeInset}px;border-radius:50%;background:var(--card-bg);display:flex;flex-direction:column;align-items:center;justify-content:center">
+        <span style="font-size:${Math.round(size * 0.16)}px;font-weight:800;color:var(--text);line-height:1">${total}</span>
+        <span style="font-size:${Math.round(size * 0.075)}px;color:var(--text-muted);margin-top:3px;text-transform:uppercase;letter-spacing:.04em">${holeLabel}</span>
+      </div>
+    </div>`;
 }
 
 export const DONUT_COLORS = ['#4f46e5', '#0ea5e9', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#6b7280'];
