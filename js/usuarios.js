@@ -1,6 +1,6 @@
 import { Store } from './storage.js';
 import { icon, escapeHtml, formatDateTime } from './utils.js';
-import { confirmDialog, toast } from './ui.js';
+import { confirmDialog, toast, openModal, closeModal } from './ui.js';
 import { goToPermisos } from './permisos.js';
 
 let _rows = [];
@@ -94,17 +94,35 @@ function rowHtml(u) {
   </tr>`;
 }
 
-async function suspend(userId) {
-  const motivo = window.prompt('Motivo de la suspensión:', '');
-  if (motivo === null) return;
-  if (!motivo.trim()) { toast('Escribe un motivo antes de suspender', 'error'); return; }
-  const ok = await confirmDialog('¿Confirmas suspender esta cuenta? La persona no podrá iniciar sesión hasta que la reactives.', { title: 'Suspender cuenta', confirmLabel: 'Suspender' });
-  if (!ok) return;
-  try {
-    await Store.suspendUser(userId, motivo.trim());
-    toast('Cuenta suspendida', 'success');
-    load();
-  } catch (err) { toast(err.message || 'No se pudo suspender', 'error'); }
+function suspend(userId) {
+  const modal = openModal({
+    title: 'Suspender cuenta',
+    size: 'sm',
+    bodyHtml: `
+      <p style="margin:0 0 12px;color:var(--text-muted);font-size:13.5px;">La persona no podrá iniciar sesión hasta que reactives la cuenta.</p>
+      <form id="suspend-form">
+        <div class="field">
+          <label>Motivo *</label>
+          <input type="text" name="motivo" required placeholder="Ej. solicitud del área, incidente de seguridad...">
+        </div>
+      </form>
+    `,
+    footerHtml: `
+      <button class="btn btn-secondary" data-close>Cancelar</button>
+      <button class="btn btn-danger" id="suspend-confirm">${icon('lock')} Suspender</button>
+    `,
+  });
+  modal.querySelector('#suspend-confirm').addEventListener('click', async () => {
+    const form = modal.querySelector('#suspend-form');
+    if (!form.reportValidity()) return;
+    const motivo = new FormData(form).get('motivo');
+    try {
+      await Store.suspendUser(userId, motivo);
+      closeModal();
+      toast('Cuenta suspendida', 'success');
+      load();
+    } catch (err) { toast(err.message || 'No se pudo suspender', 'error'); }
+  });
 }
 
 async function unsuspend(userId) {

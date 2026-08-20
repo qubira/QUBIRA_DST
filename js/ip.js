@@ -1,6 +1,6 @@
 import { Store } from './storage.js';
 import { icon, escapeHtml, formatDateTime } from './utils.js';
-import { toast } from './ui.js';
+import { toast, openModal, closeModal } from './ui.js';
 
 const CATEGORY_LABEL = { observacion: 'En observación', bloqueada: 'Bloqueada', autorizada: 'Autorizada', sospechosa: 'Sospechosa' };
 let _category = 'observacion';
@@ -115,23 +115,67 @@ async function updateIp(ip, category, extra) {
 }
 
 function blockIp(ip) {
-  const reason = window.prompt('Motivo del bloqueo:', '');
-  if (reason === null) return;
-  const perm = window.confirm('¿Bloqueo permanente?\n\nAceptar = permanente\nCancelar = temporal (24 horas)');
-  const extra = perm
-    ? { is_permanent: true, reason }
-    : { is_permanent: false, reason, blocked_until: new Date(Date.now() + 24 * 3600 * 1000).toISOString() };
-  updateIp(ip, 'bloqueada', extra);
+  const modal = openModal({
+    title: `Bloquear ${ip}`,
+    size: 'sm',
+    bodyHtml: `
+      <form id="ip-block-form">
+        <div class="field">
+          <label>Motivo del bloqueo</label>
+          <input type="text" name="reason" placeholder="Ej. fuerza bruta, IP conocida por abuso...">
+        </div>
+        <div class="field" style="display:flex;align-items:center;gap:8px;">
+          <input type="checkbox" name="permanent" id="ip-block-permanent" style="width:auto;">
+          <label for="ip-block-permanent" style="margin:0;">Bloqueo permanente (si no, dura 24 horas)</label>
+        </div>
+      </form>
+    `,
+    footerHtml: `
+      <button class="btn btn-secondary" data-close>Cancelar</button>
+      <button class="btn btn-danger" id="ip-block-confirm">${icon('shield')} Bloquear</button>
+    `,
+  });
+  modal.querySelector('#ip-block-confirm').addEventListener('click', () => {
+    const form = modal.querySelector('#ip-block-form');
+    const fd = new FormData(form);
+    const perm = fd.get('permanent') === 'on';
+    const extra = perm
+      ? { is_permanent: true, reason: fd.get('reason') }
+      : { is_permanent: false, reason: fd.get('reason'), blocked_until: new Date(Date.now() + 24 * 3600 * 1000).toISOString() };
+    closeModal();
+    updateIp(ip, 'bloqueada', extra);
+  });
 }
+
+function reasonModal({ title, confirmLabel, confirmClass = 'btn-primary', category, ip }) {
+  const modal = openModal({
+    title,
+    size: 'sm',
+    bodyHtml: `
+      <form id="ip-reason-form">
+        <div class="field">
+          <label>Motivo (opcional)</label>
+          <input type="text" name="reason">
+        </div>
+      </form>
+    `,
+    footerHtml: `
+      <button class="btn btn-secondary" data-close>Cancelar</button>
+      <button class="btn ${confirmClass}" id="ip-reason-confirm">${confirmLabel}</button>
+    `,
+  });
+  modal.querySelector('#ip-reason-confirm').addEventListener('click', () => {
+    const fd = new FormData(modal.querySelector('#ip-reason-form'));
+    closeModal();
+    updateIp(ip, category, { reason: fd.get('reason') });
+  });
+}
+
 function authorizeIp(ip) {
-  const reason = window.prompt('Motivo de la autorización (opcional):', '');
-  if (reason === null) return;
-  updateIp(ip, 'autorizada', { reason });
+  reasonModal({ title: `Autorizar ${ip}`, confirmLabel: `${icon('check-circle')} Autorizar`, category: 'autorizada', ip });
 }
 function markSuspicious(ip) {
-  const reason = window.prompt('Motivo (opcional):', '');
-  if (reason === null) return;
-  updateIp(ip, 'sospechosa', { reason });
+  reasonModal({ title: `Marcar ${ip} como sospechosa`, confirmLabel: `${icon('alert-triangle')} Marcar sospechosa`, confirmClass: 'btn-danger', category: 'sospechosa', ip });
 }
 function resetIp(ip) {
   updateIp(ip, 'observacion', { reason: null });
