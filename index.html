@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>QUBIRA DST | Seguridad y Tráfico</title>
+<link rel="icon" href="https://raw.githubusercontent.com/qubira/IMAGENES/main/logo2.png" type="image/png">
+<link rel="stylesheet" href="css/style.css?v=1">
+</head>
+<body>
+
+<!-- Sprite de íconos (Feather Icons, MIT License) -->
+<svg style="display:none">
+  <symbol id="icon-grid" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></symbol>
+  <symbol id="icon-users" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></symbol>
+  <symbol id="icon-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></symbol>
+  <symbol id="icon-bell" viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></symbol>
+  <symbol id="icon-plus" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></symbol>
+  <symbol id="icon-edit" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4z"></path></symbol>
+  <symbol id="icon-trash" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path><path d="M10 11v6"></path><path d="M14 11v6"></path><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></symbol>
+  <symbol id="icon-eye" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></symbol>
+  <symbol id="icon-close" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></symbol>
+  <symbol id="icon-log-out" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></symbol>
+  <symbol id="icon-menu" viewBox="0 0 24 24"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></symbol>
+  <symbol id="icon-alert-triangle" viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></symbol>
+  <symbol id="icon-check-circle" viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></symbol>
+  <symbol id="icon-lock" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></symbol>
+  <symbol id="icon-unlock" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 9.9-1"></path></symbol>
+  <symbol id="icon-shield" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></symbol>
+  <symbol id="icon-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></symbol>
+  <symbol id="icon-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></symbol>
+  <symbol id="icon-activity" viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></symbol>
+  <symbol id="icon-key" viewBox="0 0 24 24"><circle cx="8" cy="14" r="3"></circle><line x1="10.5" y1="11.5" x2="19" y2="3"></line><line x1="15" y1="7" x2="18" y2="10"></line><line x1="18" y1="4" x2="21" y2="7"></line></symbol>
+</svg>
+
+<div class="app-shell">
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar__brand">
+      <div class="logo-mark"><img src="https://raw.githubusercontent.com/qubira/IMAGENES/main/logo2.png" alt="Qubira"></div>
+      <div>
+        Qubira DST
+        <small>Digital Security & Traffic</small>
+      </div>
+    </div>
+
+    <nav>
+      <div class="nav-section-label">General</div>
+      <button class="nav-item" data-view="dashboard"><svg class="icon"><use href="#icon-activity"></use></svg> Dashboard</button>
+
+      <div class="nav-section-label">Identidad y accesos</div>
+      <button class="nav-item" data-view="usuarios"><svg class="icon"><use href="#icon-users"></use></svg> Usuarios</button>
+      <button class="nav-item" data-view="permisos"><svg class="icon"><use href="#icon-key"></use></svg> Permisos</button>
+      <button class="nav-item" data-view="sesiones"><svg class="icon"><use href="#icon-clock"></use></svg> Sesiones</button>
+
+      <div class="nav-section-label">Seguridad</div>
+      <button class="nav-item" data-view="ip"><svg class="icon"><use href="#icon-globe"></use></svg> IP</button>
+      <button class="nav-item" data-view="auditoria"><svg class="icon"><use href="#icon-eye"></use></svg> Auditoría</button>
+    </nav>
+
+    <div class="sidebar__footer">
+      <div class="sidebar__footer-user">
+        <div class="avatar" id="session-avatar">AD</div>
+        <div>
+          <div class="user-name" id="session-name">Administrador</div>
+          <div class="user-role" id="session-role">DST · Qubira</div>
+        </div>
+      </div>
+      <button id="switch-module-btn" class="sidebar__logout-btn sidebar__switch-btn" title="Cambiar de módulo">
+        <svg class="icon" style="width:15px;height:15px"><use href="#icon-grid"></use></svg>
+        Módulos
+      </button>
+      <button id="logout-btn" class="sidebar__logout-btn" title="Cerrar sesión">
+        <svg class="icon" style="width:15px;height:15px"><use href="#icon-log-out"></use></svg>
+        Cerrar sesión
+      </button>
+    </div>
+  </aside>
+
+  <div class="main">
+    <header class="topbar">
+      <div class="topbar__left">
+        <button class="menu-toggle" id="menu-toggle"><svg class="icon"><use href="#icon-menu"></use></svg></button>
+        <div>
+          <h1 id="topbar-title">Dashboard</h1>
+          <div class="topbar__subtitle" id="topbar-subtitle">Resumen de seguridad del ecosistema Qubira</div>
+        </div>
+      </div>
+    </header>
+
+    <main class="content">
+      <section class="view" id="view-dashboard"></section>
+      <section class="view" id="view-usuarios"></section>
+      <section class="view" id="view-permisos"></section>
+      <section class="view" id="view-sesiones"></section>
+      <section class="view" id="view-ip"></section>
+      <section class="view" id="view-auditoria"></section>
+    </main>
+  </div>
+</div>
+
+<div class="sidebar-overlay" id="sidebar-overlay"></div>
+<div class="modal-overlay" id="modal-overlay"></div>
+<div id="toast-container"></div>
+
+<script type="module" src="js/app.js"></script>
+</body>
+</html>

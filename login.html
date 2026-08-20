@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>QUBIRA DST | Verificando sesión</title>
+<link rel="icon" href="https://raw.githubusercontent.com/qubira/IMAGENES/main/logo2.png" type="image/png">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --sidebar-bg: #111827; --primary: #4f46e5; --primary-2: #818cf8;
+    --bg: #f3f4f6; --card-bg: #ffffff; --border: #e5e7eb; --text: #111827; --text-muted: #6b7280;
+    --danger: #dc2626; --shadow-md: 0 10px 25px -5px rgba(0,0,0,.08), 0 4px 6px -4px rgba(0,0,0,.05);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { min-height: 100%; font-family: 'Inter', 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); }
+  body { display: grid; place-items: center; min-height: 100dvh; padding: 20px; }
+  .card {
+    width: min(420px, 100%); background: var(--card-bg); border: 1px solid var(--border); border-radius: 20px;
+    box-shadow: var(--shadow-md); padding: 40px 32px; text-align: center;
+  }
+  .logo { width: 52px; height: 52px; object-fit: contain; border-radius: 12px; background: var(--sidebar-bg); padding: 8px; margin-bottom: 18px; }
+  h1 { font-size: 17px; font-weight: 800; margin-bottom: 8px; }
+  p { font-size: 13px; color: var(--text-muted); line-height: 1.6; }
+  .spinner {
+    width: 30px; height: 30px; border-radius: 50%; border: 3px solid var(--border);
+    border-top-color: var(--primary); animation: spin .8s linear infinite; margin: 18px auto 0;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  a.btn {
+    display: inline-block; margin-top: 18px; padding: 11px 20px; border-radius: 10px;
+    background: linear-gradient(135deg, var(--primary), var(--primary-2)); color: #fff;
+    font-size: 13px; font-weight: 700; text-decoration: none;
+  }
+</style>
+</head>
+<body>
+  <div class="card">
+    <img class="logo" src="https://raw.githubusercontent.com/qubira/IMAGENES/main/logo2.png" alt="QUBIRA">
+    <h1 id="title">Verificando tu sesión…</h1>
+    <p id="subtitle">Un momento por favor.</p>
+    <div class="spinner" id="spinner"></div>
+  </div>
+
+<script>
+'use strict';
+
+/* Igual que en los demás paneles: el único login de credenciales vive
+   en LOGIN/login.html. Esta página solo recibe el traspaso de un solo
+   uso o revalida el token local — y, además, exige que la cuenta sea
+   privilegiada (nivel_acceso>=100), porque DST es un panel sensible. */
+
+const QD_API_BASE = (location.hostname === 'localhost' || location.hostname === '127.0.0.1')
+  ? 'http://localhost:4000'
+  : 'https://api-qubira.onrender.com';
+
+const CENTRAL_LOGIN_URL = (location.hostname === 'localhost' || location.hostname === '127.0.0.1')
+  ? 'http://localhost:5515/login.html'
+  : 'https://qubira-login.vercel.app/login.html';
+
+function goToPanel() { window.location.href = 'index.html'; }
+function goToCentralLogin() { window.location.href = CENTRAL_LOGIN_URL; }
+function showError(msg) {
+  document.getElementById('title').textContent = 'No se pudo entrar';
+  document.getElementById('subtitle').innerHTML = msg + '<br><a class="btn" href="' + CENTRAL_LOGIN_URL + '">Ir al acceso central</a>';
+  document.getElementById('spinner').style.display = 'none';
+}
+
+function isAuthorized(user) {
+  return (user.nivel_acceso || 0) >= 100 && (user.authorized_modules || []).includes('DST');
+}
+
+async function exchangeHandoff(code) {
+  try {
+    const res = await fetch(`${QD_API_BASE}/api/auth/exchange`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code }),
+    });
+    const data = await res.json();
+    if (!res.ok || !data.ok) { showError(data.error || 'El enlace de acceso venció o ya se usó.'); return; }
+    if (!isAuthorized(data.user)) { showError('Tu cuenta no tiene privilegios de administrador.'); return; }
+
+    localStorage.setItem('dst_token', data.token);
+    localStorage.setItem('dst_user', JSON.stringify(data.user));
+    history.replaceState(null, '', location.pathname);
+    goToPanel();
+  } catch (err) {
+    showError('No se pudo conectar con la API.');
+  }
+}
+
+async function checkExistingSession() {
+  const existingToken = localStorage.getItem('dst_token');
+  if (!existingToken) { goToCentralLogin(); return; }
+
+  try {
+    const res = await fetch(`${QD_API_BASE}/api/auth/me`, { headers: { Authorization: 'Bearer ' + existingToken } });
+    if (!res.ok) { localStorage.removeItem('dst_token'); localStorage.removeItem('dst_user'); goToCentralLogin(); return; }
+    const data = await res.json();
+    if (!isAuthorized(data.user)) {
+      localStorage.removeItem('dst_token'); localStorage.removeItem('dst_user');
+      showError('Tu cuenta no tiene privilegios de administrador.');
+      return;
+    }
+    localStorage.setItem('dst_user', JSON.stringify(data.user));
+    goToPanel();
+  } catch (err) {
+    showError('No se pudo conectar con la API.');
+  }
+}
+
+(function init() {
+  const code = new URLSearchParams(location.search).get('handoff');
+  if (code) { exchangeHandoff(code); return; }
+  checkExistingSession();
+})();
+</script>
+</body>
+</html>
