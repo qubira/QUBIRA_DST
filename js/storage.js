@@ -42,13 +42,15 @@ export const Store = {
   setGrantedModules: (userId, modules) => qdFetch(`/api/security/permissions/${userId}`, { method: 'POST', body: JSON.stringify({ modules }) }),
   getPermissionHistory: (userId) => qdFetch(`/api/security/permissions/${userId}/history`),
 
-  // Suspensión
+  // Suspensión / bloqueo
   suspendUser: (userId, motivo) => qdFetch(`/api/security/users/${userId}/suspend`, { method: 'POST', body: JSON.stringify({ motivo }) }),
   unsuspendUser: (userId) => qdFetch(`/api/security/users/${userId}/unsuspend`, { method: 'POST' }),
+  unlockUser: (userId) => qdFetch(`/api/security/users/${userId}/unlock`, { method: 'POST' }),
 
   // Sesiones
   getSessions: () => qdFetch('/api/security/sessions'),
   revokeSession: (id) => qdFetch(`/api/security/sessions/${id}`, { method: 'DELETE' }),
+  getLoginHistory: (username, days) => qdFetch(`/api/security/login-history/${encodeURIComponent(username)}` + qs({ days })),
 
   // IP
   getIps: (params) => qdFetch('/api/security/ips' + qs(params)),
@@ -57,6 +59,7 @@ export const Store = {
   // Auditoría (comparte /api/audit/logs con los 4 paneles)
   getAuditLogs: (params) => qdFetch('/api/audit/logs' + qs(params)),
 
-  // Dashboard
+  // Dashboard y amenazas
   getDashboard: () => qdFetch('/api/security/dashboard'),
+  getThreats: () => qdFetch('/api/security/threats'),
 };
