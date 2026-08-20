@@ -130,7 +130,7 @@ function rowHtml(s) {
     <td class="cell-sub">${formatDateTime(s.expires_at)}</td>
     <td><button class="btn btn-danger btn-sm" data-revoke="${s.id}">${icon('log-out')} Cerrar</button></td>
   </tr>
-  ${isOpen ? `<tr class="ses-detail-row"><td colspan="7">${historyPanelHtml(s.username)}</td></tr>` : ''}
+  ${isOpen ? `<tr class="ses-detail-row"><td colspan="7">${historyPanelHtml(s)}</td></tr>` : ''}
   `;
 }
 
@@ -141,50 +141,77 @@ function toggleHistory(usuarioId, username) {
   if (_expanded === id) loadHistory(username);
 }
 
-function historyPanelHtml(username) {
-  const cached = _historyCache.get(username);
+function historyPanelHtml(session) {
+  const cached = _historyCache.get(session.username);
   return `
     <div class="ses-history">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-        <strong style="font-size:12.5px">Historial de logeo por día — ${escapeHtml(username)}</strong>
-        <select data-history-days="${escapeHtml(username)}" style="font-size:12px">
+        <strong style="font-size:12.5px">Historial de logeo por día — ${escapeHtml(session.username)}</strong>
+        <select data-history-days="${escapeHtml(session.username)}" style="font-size:12px">
           <option value="7" ${_historyDays === 7 ? 'selected' : ''}>Últimos 7 días</option>
           <option value="30" ${_historyDays === 30 ? 'selected' : ''}>Últimos 30 días</option>
           <option value="90" ${_historyDays === 90 ? 'selected' : ''}>Últimos 90 días</option>
         </select>
       </div>
-      <div id="ses-history-body">${cached ? historyRowsHtml(cached) : '<p style="font-size:12.5px;color:var(--text-muted)">Cargando historial…</p>'}</div>
+      <div id="ses-history-body">${cached ? historyRowsHtml(cached, session) : '<p style="font-size:12.5px;color:var(--text-muted)">Cargando historial…</p>'}</div>
     </div>`;
 }
 
-function historyRowsHtml(rows) {
+/* Por cada día, una tabla con las mismas columnas que la fila
+   principal (IP, Dispositivo, Inicio, Última actividad, Expira) —
+   "Última actividad" y "Expira" solo existen para la sesión que
+   sigue activa ahora mismo (login_attempts no guarda el ciclo de vida
+   de la sesión, y las sesiones cerradas/vencidas se borran de
+   `sesiones`); el primer login exitoso encontrado —de más reciente a
+   más antiguo— es esa sesión viva y se anota con esos datos reales,
+   el resto queda marcado como sesión finalizada. */
+function historyRowsHtml(rows, liveSession) {
   if (!rows.length) return `<p style="font-size:12.5px;color:var(--text-muted)">Sin registros de login en este rango.</p>`;
-  return `
-    <table class="ses-history-table">
-      <thead><tr><th>Día</th><th>Exitosos</th><th>Fallidos</th><th>Detalle</th></tr></thead>
-      <tbody>
-        ${rows.map(r => `
-          <tr>
-            <td class="cell-main">${new Date(r.dia).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })}</td>
-            <td>${r.fallidos > 0 && r.exitosos === 0 ? `<span class="badge badge-red">${r.exitosos}</span>` : `<span class="badge badge-green">${r.exitosos}</span>`}</td>
-            <td>${r.fallidos > 0 ? `<span class="badge badge-amber">${r.fallidos}</span>` : '0'}</td>
-            <td class="cell-sub">
-              ${(r.eventos || []).slice(0, 5).map(ev => `${formatDateTimeSec(ev.created_at)} · ${escapeHtml(ev.ip || '—')} ${ev.success ? '✓' : '✕'}`).join('<br>')}
-              ${r.eventos && r.eventos.length > 5 ? `<br>+${r.eventos.length - 5} más` : ''}
-            </td>
-          </tr>
-        `).join('')}
-      </tbody>
-    </table>`;
+  let liveFound = false;
+
+  return rows.map(r => {
+    const eventos = r.eventos || [];
+    const eventRows = eventos.map(ev => {
+      const isLive = !liveFound && ev.success && ev.ip === liveSession.ip_address;
+      if (isLive) liveFound = true;
+      return `
+        <tr>
+          <td class="cell-sub">${escapeHtml(ev.ip || '—')}</td>
+          <td class="cell-sub" title="${escapeHtml(ev.user_agent || '')}">${escapeHtml((ev.user_agent || '—').slice(0, 40))}</td>
+          <td class="cell-sub">${formatDateTimeSec(ev.created_at)}</td>
+          <td class="cell-sub">${isLive ? formatDateTime(liveSession.ultima_actividad) : (ev.success ? 'Sesión finalizada' : '—')}</td>
+          <td class="cell-sub">${isLive ? formatDateTime(liveSession.expires_at) : '—'}</td>
+          <td>${ev.success ? '<span class="badge badge-green">Éxito</span>' : '<span class="badge badge-red">Fallido</span>'}</td>
+        </tr>`;
+    }).join('');
+
+    return `
+      <div class="ses-history-day">
+        <div class="ses-history-day__header">
+          <strong>${new Date(r.dia).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })}</strong>
+          <span class="badge badge-green">${r.exitosos} exitosos</span>
+          ${r.fallidos > 0 ? `<span class="badge badge-amber">${r.fallidos} fallidos</span>` : ''}
+        </div>
+        <table class="ses-history-table">
+          <thead><tr><th>IP</th><th>Dispositivo</th><th>Inicio</th><th>Última actividad</th><th>Expira</th><th></th></tr></thead>
+          <tbody>${eventRows}</tbody>
+        </table>
+      </div>`;
+  }).join('');
 }
 
 async function loadHistory(username) {
-  if (_historyCache.has(username)) return;
+  const liveSession = _all.find(s => s.username === username);
+  if (_historyCache.has(username)) {
+    const body = document.getElementById('ses-history-body');
+    if (body) body.innerHTML = historyRowsHtml(_historyCache.get(username), liveSession);
+    return;
+  }
   try {
     const data = await Store.getLoginHistory(username, _historyDays);
     _historyCache.set(username, data.rows);
     const body = document.getElementById('ses-history-body');
-    if (body) body.innerHTML = historyRowsHtml(data.rows);
+    if (body) body.innerHTML = historyRowsHtml(data.rows, liveSession);
   } catch (err) {
     const body = document.getElementById('ses-history-body');
     if (body) body.innerHTML = `<p style="font-size:12.5px;color:var(--danger)">${escapeHtml(err.message || 'No se pudo cargar el historial')}</p>`;

@@ -62,4 +62,5 @@ export const Store = {
   // Dashboard y amenazas
   getDashboard: () => qdFetch('/api/security/dashboard'),
   getThreats: () => qdFetch('/api/security/threats'),
+  getLoginsToday: () => qdFetch('/api/security/logins-today'),
 };

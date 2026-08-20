@@ -415,6 +415,19 @@ body {
 }
 .ses-history-table td { padding: 6px 10px 6px 0; vertical-align: top; border-top: 1px solid var(--border); }
 
+.ses-history-day { margin-bottom: 16px; }
+.ses-history-day:last-child { margin-bottom: 0; }
+.ses-history-day__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+  font-size: 12.5px;
+}
+
+.kpi-card.clickable { cursor: pointer; transition: box-shadow .15s ease, transform .15s ease; }
+.kpi-card.clickable:hover { box-shadow: var(--shadow-md, 0 6px 16px rgba(0,0,0,.08)); transform: translateY(-1px); }
+
 .panels-grid {
   display: grid;
   grid-template-columns: 1.3fr 1fr;
