@@ -389,6 +389,33 @@ body {
 .kpi-card__icon.gray { background: var(--gray-bg); color: var(--gray); }
 .kpi-card__icon.red { background: var(--danger-bg); color: var(--danger); }
 
+.ses-group {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 14px 18px;
+  margin-bottom: 12px;
+}
+.ses-group__summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  cursor: pointer;
+  list-style: none;
+  font-size: 14px;
+}
+.ses-group__summary::-webkit-details-marker { display: none; }
+.ses-group__summary::before {
+  content: '▸';
+  display: inline-block;
+  margin-right: 8px;
+  color: var(--text-muted);
+  transition: transform .15s ease;
+}
+.ses-group[open] .ses-group__summary::before { transform: rotate(90deg); }
+
 .panels-grid {
   display: grid;
   grid-template-columns: 1.3fr 1fr;
