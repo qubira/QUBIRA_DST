@@ -5,6 +5,9 @@
 const QD_API_BASE = (location.hostname === 'localhost' || location.hostname === '127.0.0.1')
   ? 'http://localhost:4000'
   : 'https://api-qubira.onrender.com';
+const QD_ALERT_URL = (location.hostname === 'localhost' || location.hostname === '127.0.0.1')
+  ? 'http://localhost:5515/session-alert.html'
+  : 'https://qubira-login.vercel.app/session-alert.html';
 
 function qdToken() { return localStorage.getItem('dst_token') || null; }
 
@@ -16,9 +19,15 @@ async function qdFetch(path, opts = {}) {
   const res = await fetch(QD_API_BASE + path, { ...opts, headers });
 
   if (res.status === 401) {
+    const data401 = await res.json().catch(() => ({}));
+    const cachedUsername = JSON.parse(localStorage.getItem('dst_user') || 'null')?.username;
     localStorage.removeItem('dst_token');
     localStorage.removeItem('dst_user');
-    window.location.href = 'login.html';
+    if (data401?.code === 'SESSION_REPLACED') {
+      window.location.href = `${QD_ALERT_URL}?username=${encodeURIComponent(cachedUsername || '')}&ip=${encodeURIComponent(data401.ip || '')}`;
+    } else {
+      window.location.href = 'login.html';
+    }
     throw new Error('SESSION_EXPIRED');
   }
 
@@ -34,6 +43,10 @@ function qs(params = {}) {
 }
 
 export const Store = {
+  // Heartbeat de sesión — sin datos propios, solo para que qdFetch
+  // detecte a tiempo si esta cuenta inició sesión en otro dispositivo.
+  ping: () => qdFetch('/api/auth/me'),
+
   // Usuarios
   getUsers: (q) => qdFetch('/api/security/users' + qs({ q })),
 
