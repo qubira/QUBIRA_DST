@@ -67,5 +67,7 @@ export const Store = {
 
   // Visitas — historial e interacciones del sitio público QUBIRA
   getAnalyticsSummary: (days) => qdFetch('/api/analytics/summary' + qs({ days })),
+  getAnalyticsSessions: (params) => qdFetch('/api/analytics/sessions' + qs(params)),
+  getSessionTimeline: (sessionId) => qdFetch(`/api/analytics/sessions/${encodeURIComponent(sessionId)}/timeline`),
   getAnalyticsEvents: (params) => qdFetch('/api/analytics/events' + qs(params)),
 };
