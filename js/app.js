@@ -129,3 +129,69 @@ function isAuthorized(user) {
     if (err?.message !== 'SESSION_EXPIRED') showBootError();
   }
 })();
+
+// ─── Cierre de sesión por inactividad (2 minutos sin interacción) ─────────────
+(function setupInactivityLogout(onLogout) {
+  const WARN_AFTER_MS = 90 * 1000;
+  const LOGOUT_AFTER_MS = 120 * 1000;
+  let warnTimer = null;
+  let logoutTimer = null;
+  let countdownInterval = null;
+  let overlay = null;
+
+  function hideWarning() {
+    if (overlay) { overlay.remove(); overlay = null; }
+    clearInterval(countdownInterval);
+  }
+
+  function doLogout() {
+    hideWarning();
+    clearTimeout(warnTimer);
+    clearTimeout(logoutTimer);
+    onLogout();
+  }
+
+  function showWarning() {
+    if (overlay) return;
+    let secondsLeft = Math.round((LOGOUT_AFTER_MS - WARN_AFTER_MS) / 1000);
+    overlay = document.createElement('div');
+    overlay.id = 'inactivity-overlay';
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(17,24,39,.6);z-index:99999;display:flex;align-items:center;justify-content:center;font-family:inherit';
+    overlay.innerHTML = `
+      <div style="background:#fff;border-radius:16px;padding:28px;max-width:340px;text-align:center;box-shadow:0 20px 40px rgba(0,0,0,.25)">
+        <div style="width:48px;height:48px;border-radius:50%;background:#fef3c7;display:flex;align-items:center;justify-content:center;margin:0 auto 14px;font-size:22px">⏱</div>
+        <h3 style="font-size:16px;font-weight:800;margin:0 0 8px;color:#111827">¿Sigues ahí?</h3>
+        <p style="font-size:13px;color:#6b7280;margin:0 0 18px;line-height:1.5">Tu sesión se cerrará por inactividad en <strong id="inactivity-countdown">${secondsLeft}</strong> segundos.</p>
+        <button id="inactivity-stay-btn" style="width:100%;padding:12px;border:none;border-radius:10px;background:#4f46e5;color:#fff;font-weight:700;font-size:13px;cursor:pointer;font-family:inherit">Seguir conectado</button>
+      </div>`;
+    document.body.appendChild(overlay);
+    document.getElementById('inactivity-stay-btn').addEventListener('click', resetTimers);
+    countdownInterval = setInterval(() => {
+      secondsLeft -= 1;
+      const el = document.getElementById('inactivity-countdown');
+      if (el) el.textContent = String(Math.max(secondsLeft, 0));
+      if (secondsLeft <= 0) clearInterval(countdownInterval);
+    }, 1000);
+  }
+
+  function resetTimers() {
+    hideWarning();
+    clearTimeout(warnTimer);
+    clearTimeout(logoutTimer);
+    if (!localStorage.getItem('dst_token')) return; // sin sesión activa, no hay nada que expirar
+    warnTimer = setTimeout(showWarning, WARN_AFTER_MS);
+    logoutTimer = setTimeout(doLogout, LOGOUT_AFTER_MS);
+  }
+
+  let lastActivity = 0;
+  function handleActivity() {
+    if (!localStorage.getItem('dst_token')) return;
+    const now = Date.now();
+    if (now - lastActivity < 500) return;
+    lastActivity = now;
+    resetTimers();
+  }
+
+  ['mousemove', 'mousedown', 'keydown', 'scroll', 'touchstart', 'click'].forEach(evt =>
+    document.addEventListener(evt, handleActivity, { passive: true }));
+})(logout);
