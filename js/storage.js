@@ -64,4 +64,8 @@ export const Store = {
   getDashboard: () => qdFetch('/api/security/dashboard'),
   getThreats: () => qdFetch('/api/security/threats'),
   getLoginsToday: () => qdFetch('/api/security/logins-today'),
+
+  // Visitas — historial e interacciones del sitio público QUBIRA
+  getAnalyticsSummary: (days) => qdFetch('/api/analytics/summary' + qs({ days })),
+  getAnalyticsEvents: (params) => qdFetch('/api/analytics/events' + qs(params)),
 };
