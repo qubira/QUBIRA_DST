@@ -9,10 +9,15 @@ const EVENT_TYPES = [
   ['whatsapp_click', 'Click en WhatsApp'],
   ['chatbot_open', 'Abrió el chatbot'],
   ['chatbot_message', 'Mensaje al chatbot'],
+  ['scroll_depth', 'Scroll'],
+  ['time_on_page', 'Tiempo en página'],
+  ['outbound_click', 'Click a link externo'],
+  ['nav_click', 'Click en navegación'],
 ];
 const EVENT_BADGE = {
   page_view: 'badge-gray', case_click: 'badge-green', whatsapp_click: 'badge-green',
   chatbot_open: 'badge-amber', chatbot_message: 'badge-amber',
+  scroll_depth: 'badge-gray', time_on_page: 'badge-gray', outbound_click: 'badge-amber', nav_click: 'badge-gray',
 };
 const DEVICE_ICON = { 'Móvil': 'smartphone', 'Tablet': 'smartphone', 'Escritorio': 'monitor', 'Desconocido': 'globe' };
 
@@ -166,7 +171,25 @@ function kpiHtml() {
       <div><div class="kpi-card__label">Preguntas al chatbot</div><div class="kpi-card__value">${s.chatbot_messages}</div><div class="kpi-card__hint">mensajes enviados</div></div>
       <div class="kpi-card__icon amber">${icon('activity')}</div>
     </div>
+  </div>
+  <div class="kpi-grid">
+    <div class="kpi-card">
+      <div><div class="kpi-card__label">Tiempo promedio en página</div><div class="kpi-card__value">${formatSeconds(s.avg_time_on_page_seconds)}</div><div class="kpi-card__hint">mientras la pestaña estaba visible</div></div>
+      <div class="kpi-card__icon blue">${icon('clock')}</div>
+    </div>
+    <div class="kpi-card">
+      <div><div class="kpi-card__label">Tasa de interacción</div><div class="kpi-card__value">${s.engagement_rate ?? 0}%</div><div class="kpi-card__hint">${s.engaged_sessions ?? 0} de ${s.total_sessions ?? 0} sesiones</div></div>
+      <div class="kpi-card__icon green">${icon('activity')}</div>
+    </div>
   </div>`;
+}
+
+function formatSeconds(totalSeconds) {
+  const s = Math.round(totalSeconds || 0);
+  if (s < 60) return `${s}s`;
+  const m = Math.floor(s / 60);
+  const rem = s % 60;
+  return `${m}m ${rem}s`;
 }
 
 function chartsHtml() {
@@ -233,7 +256,79 @@ function chartsHtml() {
               <div class="mini-row"><span style="font-size:12.5px" title="${escapeHtml(r.referrer)}">${escapeHtml(referrerHost(r.referrer))}</span><span class="tag">${r.total}</span></div>`).join('')}</div>`}
       </div>
     </div>
+  </div>
+  <div class="panels-grid">
+    <div class="card">
+      <div class="card__header"><h3>Profundidad de scroll</h3></div>
+      <div class="card__body">
+        ${scrollFunnelHtml(s.scroll_depth || [])}
+      </div>
+    </div>
+    <div class="card">
+      <div class="card__header"><h3>Canales de tráfico</h3></div>
+      <div class="card__body" style="display:flex;align-items:center;gap:18px;flex-wrap:wrap">
+        ${(s.channels || []).length === 0
+          ? '<p style="font-size:12px;color:var(--text-muted)">Sin datos en este rango.</p>'
+          : donutChart((s.channels || []).map(c => ({ label: c.channel, value: c.total })), { colors: DONUT_COLORS, holeLabel: 'sesiones' })}
+        <div style="display:flex;flex-direction:column;gap:6px">${(s.channels || []).map((c, i) => `
+          <div style="display:flex;align-items:center;gap:8px;font-size:12.5px;padding:5px 0;min-width:180px">
+            <span style="width:10px;height:10px;border-radius:50%;background:${DONUT_COLORS[i % DONUT_COLORS.length]};flex-shrink:0"></span>
+            <span style="color:var(--text);flex:1">${escapeHtml(c.channel)}</span>
+            <span style="color:var(--text-muted);font-variant-numeric:tabular-nums">${c.total}</span>
+          </div>`).join('')}</div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card__header"><h3>Campañas (UTM)</h3></div>
+      <div class="card__body">
+        ${(s.top_campaigns || []).length === 0
+          ? '<p style="font-size:12.5px;color:var(--text-muted)">Sin campañas registradas en este rango.</p>'
+          : `<div class="mini-list">${s.top_campaigns.map(c => `
+              <div class="mini-row"><span style="font-size:12.5px">${escapeHtml(c.utm_campaign)} <span style="color:var(--text-muted)">· ${escapeHtml(c.utm_source || '')}</span></span><span class="tag">${c.sessions}</span></div>`).join('')}</div>`}
+      </div>
+    </div>
+    <div class="card">
+      <div class="card__header"><h3>Clicks en navegación</h3></div>
+      <div class="card__body">
+        ${(s.top_nav_clicks || []).length === 0
+          ? '<p style="font-size:12.5px;color:var(--text-muted)">Sin clicks de navegación en este rango.</p>'
+          : `<div class="mini-list">${s.top_nav_clicks.map(n => `
+              <div class="mini-row"><span style="font-size:12.5px">${escapeHtml(n.seccion)}</span><span class="tag">${n.total}</span></div>`).join('')}</div>`}
+      </div>
+    </div>
+    <div class="card">
+      <div class="card__header"><h3>Clicks a links externos</h3></div>
+      <div class="card__body">
+        ${(s.top_outbound_clicks || []).length === 0
+          ? '<p style="font-size:12.5px;color:var(--text-muted)">Sin clicks a sitios externos en este rango.</p>'
+          : `<div class="mini-list">${s.top_outbound_clicks.map(o => `
+              <div class="mini-row"><span style="font-size:12.5px">${escapeHtml(o.destino)}</span><span class="tag">${o.total}</span></div>`).join('')}</div>`}
+      </div>
+    </div>
   </div>`;
+}
+
+function scrollFunnelHtml(scrollDepth) {
+  const order = ['25', '50', '75', '100'];
+  const byDepth = Object.fromEntries((scrollDepth || []).map(r => [String(r.depth), Number(r.sessions) || 0]));
+  const max = Math.max(1, ...order.map(d => byDepth[d] || 0));
+  if (order.every(d => !byDepth[d])) {
+    return '<p style="font-size:12.5px;color:var(--text-muted)">Sin datos de scroll en este rango.</p>';
+  }
+  return `<div style="display:flex;flex-direction:column;gap:10px">${order.map(d => {
+    const val = byDepth[d] || 0;
+    const pct = Math.round((val / max) * 100);
+    return `
+    <div>
+      <div style="display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:4px">
+        <span style="color:var(--text)">${d}% de la página</span>
+        <span style="color:var(--text-muted);font-variant-numeric:tabular-nums">${val} sesiones</span>
+      </div>
+      <div style="background:var(--border);border-radius:6px;height:10px;overflow:hidden">
+        <div style="width:${pct}%;height:100%;background:var(--primary);border-radius:6px"></div>
+      </div>
+    </div>`;
+  }).join('')}</div>`;
 }
 
 function tabsHtml() {
@@ -300,9 +395,11 @@ function sessionRowHtml(r) {
       </div>
     </td>
     <td class="cell-sub">${r.page_views}</td>
+    <td class="cell-sub" title="${escapeHtml(r.entry_page || '')} → ${escapeHtml(r.exit_page || '')}">${escapeHtml(r.channel || 'Directo')}</td>
     <td>${cases || '<span class="cell-sub">—</span>'}${casesExtra}</td>
     <td class="cell-sub">${r.whatsapp_clicks > 0 ? `${icon('message-circle', 'icon icon-sm')} ${r.whatsapp_clicks}` : '—'}</td>
     <td class="cell-sub">${r.chatbot_messages > 0 ? `${icon('activity', 'icon icon-sm')} ${r.chatbot_messages}` : '—'}</td>
+    <td class="cell-sub">${r.time_on_page_seconds != null ? formatSeconds(r.time_on_page_seconds) : '—'}${r.scroll_max ? ` · ${r.scroll_max}%` : ''}</td>
     <td>${r.is_lead ? '<span class="badge badge-red">🔥 Lead</span>' : ''}</td>
   </tr>`;
 }
@@ -317,7 +414,7 @@ function renderSessionsTable() {
   wrap.innerHTML = `
     <div class="table-wrap">
       <table>
-        <thead><tr><th>Última visita</th><th>Dispositivo</th><th>Páginas</th><th>Casos vistos</th><th>WhatsApp</th><th>Chatbot</th><th></th></tr></thead>
+        <thead><tr><th>Última visita</th><th>Dispositivo</th><th>Páginas</th><th>Canal</th><th>Casos vistos</th><th>WhatsApp</th><th>Chatbot</th><th>Tiempo/Scroll</th><th></th></tr></thead>
         <tbody>${_sRows.map(sessionRowHtml).join('')}</tbody>
       </table>
     </div>`;
@@ -350,6 +447,7 @@ function wireSessionFilters() {
 const TIMELINE_ICON = {
   page_view: 'eye', case_click: 'external-link', whatsapp_click: 'message-circle',
   chatbot_open: 'message-circle', chatbot_message: 'activity',
+  scroll_depth: 'bar-chart-2', time_on_page: 'clock', outbound_click: 'external-link', nav_click: 'map-pin',
 };
 
 async function openSessionTimeline(sessionId) {
