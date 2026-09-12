@@ -22,6 +22,7 @@ const EVENT_BADGE = {
 const DEVICE_ICON = { 'Móvil': 'smartphone', 'Tablet': 'smartphone', 'Escritorio': 'monitor', 'Desconocido': 'globe' };
 
 let _tab = 'sessions'; // 'sessions' | 'events'
+let _metricsTab = 'resumen'; // 'resumen' | 'adquisicion' | 'comportamiento'
 let _days = 30;
 let _summary = null;
 
@@ -105,8 +106,9 @@ async function reloadEvents(append = false) {
 function renderPage() {
   const container = document.getElementById('view-visitas');
   if (!container) return;
-  container.innerHTML = rangeHtml() + kpiHtml() + chartsHtml() + tabsHtml();
+  container.innerHTML = rangeHtml() + metricsTabsHtml() + metricsContentHtml() + tabsHtml();
   document.getElementById('vis-range')?.addEventListener('change', e => { _days = Number(e.target.value); _sOffset = 0; _offset = 0; loadAll(); });
+  wireMetricsTabs();
   wireTabs();
   if (_tab === 'sessions') {
     renderSessionsTable();
@@ -133,9 +135,100 @@ function rangeHtml() {
   </div>`;
 }
 
-function kpiHtml() {
+function formatSeconds(totalSeconds) {
+  const s = Math.round(totalSeconds || 0);
+  if (s < 60) return `${s}s`;
+  const m = Math.floor(s / 60);
+  const rem = s % 60;
+  return `${m}m ${rem}s`;
+}
+
+function metricsTabsHtml() {
+  const tabs = [
+    ['resumen', 'Resumen', 'bar-chart-2'],
+    ['adquisicion', 'Adquisición', 'globe'],
+    ['comportamiento', 'Comportamiento', 'activity'],
+  ];
+  return `<div class="metrics-tabs">${tabs.map(([key, label, ic]) => `
+    <button class="btn ${_metricsTab === key ? 'btn-primary' : 'btn-secondary'}" id="vis-mtab-${key}">${icon(ic)} ${label}</button>`).join('')}</div>`;
+}
+
+function wireMetricsTabs() {
+  ['resumen', 'adquisicion', 'comportamiento'].forEach(key => {
+    document.getElementById('vis-mtab-' + key)?.addEventListener('click', () => {
+      if (_metricsTab === key) return;
+      _metricsTab = key;
+      renderPage();
+    });
+  });
+}
+
+function metricsContentHtml() {
+  if (_metricsTab === 'adquisicion') return adquisicionHtml();
+  if (_metricsTab === 'comportamiento') return comportamientoHtml();
+  return resumenHtml();
+}
+
+function sectionHeading(iconName, title, desc) {
+  return `
+  <div class="section-heading">
+    <div class="section-heading__icon">${icon(iconName)}</div>
+    <div><h2>${title}</h2><p>${desc}</p></div>
+  </div>`;
+}
+
+/* Lista de ranking con barra proporcional al valor máximo — reemplaza
+   los mini-list de solo texto para que las listas "top N" (páginas,
+   campañas, referencias, clicks) se vean como en un dashboard real
+   en vez de una tabla plana. */
+function barListHtml(rows, emptyText) {
+  if (!rows || rows.length === 0) {
+    return `<p style="font-size:12.5px;color:var(--text-muted)">${emptyText}</p>`;
+  }
+  const max = Math.max(1, ...rows.map(r => r.value));
+  return `<div class="bar-list">${rows.map((r, i) => {
+    const pct = Math.round((r.value / max) * 100);
+    return `
+    <div>
+      <div class="bar-list__row-top">
+        <span class="bar-list__label"${r.title ? ` title="${escapeHtml(r.title)}"` : ''}>${escapeHtml(r.label)}</span>
+        <span class="bar-list__value">${r.value}</span>
+      </div>
+      <div class="bar-list__track"><div class="bar-list__fill" style="width:${pct}%;background:${DONUT_COLORS[i % DONUT_COLORS.length]}"></div></div>
+    </div>`;
+  }).join('')}</div>`;
+}
+
+/* Embudo real: cada escalón se dibuja como una barra centrada cuyo
+   ancho es proporcional al primer paso (25% de scroll = 100% de la
+   base), con el % de caída respecto al escalón anterior en medio —
+   mismo lenguaje visual que un funnel de GA4, no una barra suelta. */
+function funnelHtml(scrollDepth) {
+  const order = ['25', '50', '75', '100'];
+  const byDepth = Object.fromEntries((scrollDepth || []).map(r => [String(r.depth), Number(r.sessions) || 0]));
+  const values = order.map(d => byDepth[d] || 0);
+  if (!values.some(v => v > 0)) {
+    return '<p style="font-size:12.5px;color:var(--text-muted)">Sin datos de scroll en este rango.</p>';
+  }
+  const base = values[0] > 0 ? values[0] : Math.max(...values, 1);
+  return `<div class="funnel">${order.map((d, i) => {
+    const val = values[i];
+    const pctOfBase = Math.round((val / base) * 100);
+    const prevVal = i > 0 ? values[i - 1] : null;
+    const drop = (prevVal && prevVal > 0) ? Math.round(((prevVal - val) / prevVal) * 100) : null;
+    return `
+    ${drop !== null ? `<div class="funnel__drop">▼ ${drop}% de caída respecto al paso anterior</div>` : ''}
+    <div class="funnel__bar-wrap">
+      <div class="funnel__bar" style="width:${Math.max(pctOfBase, 12)}%;background:${DONUT_COLORS[i % DONUT_COLORS.length]}">${val} sesiones</div>
+    </div>
+    <div class="funnel__meta"><span>${d}% de la página</span><span>${pctOfBase}% del primer paso</span></div>`;
+  }).join('')}</div>`;
+}
+
+function resumenHtml() {
   const s = _summary;
   return `
+  ${sectionHeading('bar-chart-2', 'Resumen', 'Panorama general del tráfico e interacciones del sitio en el rango seleccionado.')}
   <div class="kpi-grid">
     <div class="kpi-card">
       <div><div class="kpi-card__label">Vistas de página</div><div class="kpi-card__value">${s.total_views}</div><div class="kpi-card__hint">últimos ${s.days} días</div></div>
@@ -164,16 +257,6 @@ function kpiHtml() {
       <div class="kpi-card__icon amber">${icon('user-check')}</div>
     </div>
     <div class="kpi-card">
-      <div><div class="kpi-card__label">Clicks en casos de éxito</div><div class="kpi-card__value">${s.case_clicks}</div><div class="kpi-card__hint">botón "Ver sitio"</div></div>
-      <div class="kpi-card__icon amber">${icon('external-link')}</div>
-    </div>
-    <div class="kpi-card">
-      <div><div class="kpi-card__label">Preguntas al chatbot</div><div class="kpi-card__value">${s.chatbot_messages}</div><div class="kpi-card__hint">mensajes enviados</div></div>
-      <div class="kpi-card__icon amber">${icon('activity')}</div>
-    </div>
-  </div>
-  <div class="kpi-grid">
-    <div class="kpi-card">
       <div><div class="kpi-card__label">Tiempo promedio en página</div><div class="kpi-card__value">${formatSeconds(s.avg_time_on_page_seconds)}</div><div class="kpi-card__hint">mientras la pestaña estaba visible</div></div>
       <div class="kpi-card__icon blue">${icon('clock')}</div>
     </div>
@@ -181,27 +264,61 @@ function kpiHtml() {
       <div><div class="kpi-card__label">Tasa de interacción</div><div class="kpi-card__value">${s.engagement_rate ?? 0}%</div><div class="kpi-card__hint">${s.engaged_sessions ?? 0} de ${s.total_sessions ?? 0} sesiones</div></div>
       <div class="kpi-card__icon green">${icon('activity')}</div>
     </div>
+  </div>
+  <div class="card" style="margin-top:22px">
+    <div class="card__header"><h3>Vistas de página por día (${s.days} días)</h3></div>
+    <div class="card__body">
+      ${(s.views_by_day || []).length === 0
+        ? '<p style="text-align:center;padding:40px 0;color:var(--text-muted);font-size:12.5px">Sin vistas registradas en este rango.</p>'
+        : singleBarChart(s.views_by_day, { key: 'total', color: 'var(--primary)' })}
+    </div>
   </div>`;
 }
 
-function formatSeconds(totalSeconds) {
-  const s = Math.round(totalSeconds || 0);
-  if (s < 60) return `${s}s`;
-  const m = Math.floor(s / 60);
-  const rem = s % 60;
-  return `${m}m ${rem}s`;
+function adquisicionHtml() {
+  const s = _summary;
+  const channels = s.channels || [];
+  const channelLegend = channels.map((c, i) => `
+    <div style="display:flex;align-items:center;gap:8px;font-size:12.5px;padding:5px 0;min-width:180px">
+      <span style="width:10px;height:10px;border-radius:50%;background:${DONUT_COLORS[i % DONUT_COLORS.length]};flex-shrink:0"></span>
+      <span style="color:var(--text);flex:1">${escapeHtml(c.channel)}</span>
+      <span style="color:var(--text-muted);font-variant-numeric:tabular-nums">${c.total}</span>
+    </div>`).join('');
+  const campaignRows = (s.top_campaigns || []).map(c => ({ label: `${c.utm_campaign} · ${c.utm_source || ''}`, value: c.sessions }));
+  const referrerRows = (s.top_referrers || []).map(r => ({ label: referrerHost(r.referrer), value: r.total, title: r.referrer }));
+
+  return `
+  ${sectionHeading('globe', 'Adquisición', 'De dónde vienen tus visitantes: canales de tráfico, campañas de marketing y sitios que refieren.')}
+  <div class="panels-grid">
+    <div class="card">
+      <div class="card__header"><h3>Canales de tráfico</h3></div>
+      <div class="card__body" style="display:flex;align-items:center;gap:18px;flex-wrap:wrap">
+        ${channels.length === 0
+          ? '<p style="font-size:12px;color:var(--text-muted)">Sin datos en este rango.</p>'
+          : donutChart(channels.map(c => ({ label: c.channel, value: c.total })), { colors: DONUT_COLORS, holeLabel: 'sesiones' })}
+        <div style="display:flex;flex-direction:column;gap:6px">${channelLegend}</div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card__header"><h3>Campañas (UTM)</h3></div>
+      <div class="card__body">${barListHtml(campaignRows, 'Sin campañas registradas en este rango.')}</div>
+    </div>
+  </div>
+  <div class="card" style="margin-top:16px">
+    <div class="card__header"><h3>De dónde llegan</h3></div>
+    <div class="card__body">${barListHtml(referrerRows, 'Sin referencias externas en este rango (entran directo).')}</div>
+  </div>`;
 }
 
-function chartsHtml() {
+function comportamientoHtml() {
   const s = _summary;
   const cases = s.top_cases || [];
-  const legend = cases.map((c, i) => `
+  const caseLegend = cases.map((c, i) => `
     <div style="display:flex;align-items:center;gap:8px;font-size:12.5px;padding:5px 0;min-width:180px">
       <span style="width:10px;height:10px;border-radius:50%;background:${DONUT_COLORS[i % DONUT_COLORS.length]};flex-shrink:0"></span>
       <span style="color:var(--text);flex:1">${escapeHtml(c.case_name)}</span>
       <span style="color:var(--text-muted);font-variant-numeric:tabular-nums">${c.total}</span>
     </div>`).join('');
-
   const devices = s.device_breakdown || [];
   const deviceLegend = devices.map((d, i) => `
     <div style="display:flex;align-items:center;gap:8px;font-size:12.5px;padding:5px 0;min-width:150px">
@@ -209,24 +326,28 @@ function chartsHtml() {
       <span style="color:var(--text);flex:1;display:flex;align-items:center;gap:5px">${icon(DEVICE_ICON[d.device] || 'globe', 'icon icon-sm')}${escapeHtml(d.device)}</span>
       <span style="color:var(--text-muted);font-variant-numeric:tabular-nums">${d.total}</span>
     </div>`).join('');
+  const pageRows = (s.top_pages || []).map(p => ({ label: p.page, value: p.total }));
+  const navRows = (s.top_nav_clicks || []).map(n => ({ label: n.seccion, value: n.total }));
+  const outboundRows = (s.top_outbound_clicks || []).map(o => ({ label: o.destino, value: o.total }));
 
   return `
-  <div class="card" style="margin-bottom:16px">
-    <div class="card__header"><h3>Vistas de página por día (${s.days} días)</h3></div>
-    <div class="card__body">
-      ${(s.views_by_day || []).length === 0
-        ? '<p style="text-align:center;padding:40px 0;color:var(--text-muted);font-size:12.5px">Sin vistas registradas en este rango.</p>'
-        : singleBarChart(s.views_by_day, { key: 'total', color: 'var(--primary)' })}
-    </div>
-  </div>
+  ${sectionHeading('activity', 'Comportamiento', 'Qué tan lejos llegan los visitantes en la página y con qué elementos interactúan.')}
   <div class="panels-grid">
+    <div class="card">
+      <div class="card__header"><h3>Profundidad de scroll</h3></div>
+      <div class="card__body">${funnelHtml(s.scroll_depth || [])}</div>
+    </div>
+    <div class="card">
+      <div class="card__header"><h3>Páginas más vistas</h3></div>
+      <div class="card__body">${barListHtml(pageRows, 'Sin datos en este rango.')}</div>
+    </div>
     <div class="card">
       <div class="card__header"><h3>Casos de éxito más clickeados</h3></div>
       <div class="card__body" style="display:flex;align-items:center;gap:18px;flex-wrap:wrap">
         ${cases.length === 0
           ? '<p style="font-size:12px;color:var(--text-muted)">Sin clicks todavía en este rango.</p>'
           : donutChart(cases.map(c => ({ label: c.case_name, value: c.total })), { colors: DONUT_COLORS, holeLabel: 'clicks' })}
-        <div style="display:flex;flex-direction:column;gap:6px">${legend}</div>
+        <div style="display:flex;flex-direction:column;gap:6px">${caseLegend}</div>
       </div>
     </div>
     <div class="card">
@@ -238,97 +359,17 @@ function chartsHtml() {
         <div style="display:flex;flex-direction:column;gap:6px">${deviceLegend}</div>
       </div>
     </div>
-    <div class="card">
-      <div class="card__header"><h3>Páginas más vistas</h3></div>
-      <div class="card__body">
-        ${(s.top_pages || []).length === 0
-          ? '<p style="font-size:12.5px;color:var(--text-muted)">Sin datos en este rango.</p>'
-          : `<div class="mini-list">${s.top_pages.map(p => `
-              <div class="mini-row"><span style="font-size:12.5px">${escapeHtml(p.page)}</span><span class="tag">${p.total}</span></div>`).join('')}</div>`}
-      </div>
-    </div>
-    <div class="card">
-      <div class="card__header"><h3>De dónde llegan</h3></div>
-      <div class="card__body">
-        ${(s.top_referrers || []).length === 0
-          ? '<p style="font-size:12.5px;color:var(--text-muted)">Sin referencias externas en este rango (entran directo).</p>'
-          : `<div class="mini-list">${s.top_referrers.map(r => `
-              <div class="mini-row"><span style="font-size:12.5px" title="${escapeHtml(r.referrer)}">${escapeHtml(referrerHost(r.referrer))}</span><span class="tag">${r.total}</span></div>`).join('')}</div>`}
-      </div>
-    </div>
   </div>
-  <div class="panels-grid">
-    <div class="card">
-      <div class="card__header"><h3>Profundidad de scroll</h3></div>
-      <div class="card__body">
-        ${scrollFunnelHtml(s.scroll_depth || [])}
-      </div>
-    </div>
-    <div class="card">
-      <div class="card__header"><h3>Canales de tráfico</h3></div>
-      <div class="card__body" style="display:flex;align-items:center;gap:18px;flex-wrap:wrap">
-        ${(s.channels || []).length === 0
-          ? '<p style="font-size:12px;color:var(--text-muted)">Sin datos en este rango.</p>'
-          : donutChart((s.channels || []).map(c => ({ label: c.channel, value: c.total })), { colors: DONUT_COLORS, holeLabel: 'sesiones' })}
-        <div style="display:flex;flex-direction:column;gap:6px">${(s.channels || []).map((c, i) => `
-          <div style="display:flex;align-items:center;gap:8px;font-size:12.5px;padding:5px 0;min-width:180px">
-            <span style="width:10px;height:10px;border-radius:50%;background:${DONUT_COLORS[i % DONUT_COLORS.length]};flex-shrink:0"></span>
-            <span style="color:var(--text);flex:1">${escapeHtml(c.channel)}</span>
-            <span style="color:var(--text-muted);font-variant-numeric:tabular-nums">${c.total}</span>
-          </div>`).join('')}</div>
-      </div>
-    </div>
-    <div class="card">
-      <div class="card__header"><h3>Campañas (UTM)</h3></div>
-      <div class="card__body">
-        ${(s.top_campaigns || []).length === 0
-          ? '<p style="font-size:12.5px;color:var(--text-muted)">Sin campañas registradas en este rango.</p>'
-          : `<div class="mini-list">${s.top_campaigns.map(c => `
-              <div class="mini-row"><span style="font-size:12.5px">${escapeHtml(c.utm_campaign)} <span style="color:var(--text-muted)">· ${escapeHtml(c.utm_source || '')}</span></span><span class="tag">${c.sessions}</span></div>`).join('')}</div>`}
-      </div>
-    </div>
+  <div class="panels-grid" style="margin-top:16px">
     <div class="card">
       <div class="card__header"><h3>Clicks en navegación</h3></div>
-      <div class="card__body">
-        ${(s.top_nav_clicks || []).length === 0
-          ? '<p style="font-size:12.5px;color:var(--text-muted)">Sin clicks de navegación en este rango.</p>'
-          : `<div class="mini-list">${s.top_nav_clicks.map(n => `
-              <div class="mini-row"><span style="font-size:12.5px">${escapeHtml(n.seccion)}</span><span class="tag">${n.total}</span></div>`).join('')}</div>`}
-      </div>
+      <div class="card__body">${barListHtml(navRows, 'Sin clicks de navegación en este rango.')}</div>
     </div>
     <div class="card">
       <div class="card__header"><h3>Clicks a links externos</h3></div>
-      <div class="card__body">
-        ${(s.top_outbound_clicks || []).length === 0
-          ? '<p style="font-size:12.5px;color:var(--text-muted)">Sin clicks a sitios externos en este rango.</p>'
-          : `<div class="mini-list">${s.top_outbound_clicks.map(o => `
-              <div class="mini-row"><span style="font-size:12.5px">${escapeHtml(o.destino)}</span><span class="tag">${o.total}</span></div>`).join('')}</div>`}
-      </div>
+      <div class="card__body">${barListHtml(outboundRows, 'Sin clicks a sitios externos en este rango.')}</div>
     </div>
   </div>`;
-}
-
-function scrollFunnelHtml(scrollDepth) {
-  const order = ['25', '50', '75', '100'];
-  const byDepth = Object.fromEntries((scrollDepth || []).map(r => [String(r.depth), Number(r.sessions) || 0]));
-  const max = Math.max(1, ...order.map(d => byDepth[d] || 0));
-  if (order.every(d => !byDepth[d])) {
-    return '<p style="font-size:12.5px;color:var(--text-muted)">Sin datos de scroll en este rango.</p>';
-  }
-  return `<div style="display:flex;flex-direction:column;gap:10px">${order.map(d => {
-    const val = byDepth[d] || 0;
-    const pct = Math.round((val / max) * 100);
-    return `
-    <div>
-      <div style="display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:4px">
-        <span style="color:var(--text)">${d}% de la página</span>
-        <span style="color:var(--text-muted);font-variant-numeric:tabular-nums">${val} sesiones</span>
-      </div>
-      <div style="background:var(--border);border-radius:6px;height:10px;overflow:hidden">
-        <div style="width:${pct}%;height:100%;background:var(--primary);border-radius:6px"></div>
-      </div>
-    </div>`;
-  }).join('')}</div>`;
 }
 
 function tabsHtml() {
