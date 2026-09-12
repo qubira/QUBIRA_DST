@@ -13,11 +13,14 @@ const EVENT_TYPES = [
   ['time_on_page', 'Tiempo en página'],
   ['outbound_click', 'Click a link externo'],
   ['nav_click', 'Click en navegación'],
+  ['job_apply_click', 'Click en Postular (empleo)'],
+  ['job_apply_submit', 'Postulación enviada'],
 ];
 const EVENT_BADGE = {
   page_view: 'badge-gray', case_click: 'badge-green', whatsapp_click: 'badge-green',
   chatbot_open: 'badge-amber', chatbot_message: 'badge-amber',
   scroll_depth: 'badge-gray', time_on_page: 'badge-gray', outbound_click: 'badge-amber', nav_click: 'badge-gray',
+  job_apply_click: 'badge-amber', job_apply_submit: 'badge-green',
 };
 const DEVICE_ICON = { 'Móvil': 'smartphone', 'Tablet': 'smartphone', 'Escritorio': 'monitor', 'Desconocido': 'globe' };
 
@@ -265,6 +268,16 @@ function resumenHtml() {
       <div class="kpi-card__icon green">${icon('activity')}</div>
     </div>
   </div>
+  <div class="kpi-grid">
+    <div class="kpi-card">
+      <div><div class="kpi-card__label">Clicks en Postular</div><div class="kpi-card__value">${s.job_apply_clicks ?? 0}</div><div class="kpi-card__hint">abrieron el formulario de una oferta</div></div>
+      <div class="kpi-card__icon amber">${icon('external-link')}</div>
+    </div>
+    <div class="kpi-card">
+      <div><div class="kpi-card__label">Postulaciones enviadas</div><div class="kpi-card__value">${s.job_applications ?? 0}</div><div class="kpi-card__hint">bolsa de trabajo pública</div></div>
+      <div class="kpi-card__icon green">${icon('check-circle')}</div>
+    </div>
+  </div>
   <div class="card" style="margin-top:22px">
     <div class="card__header"><h3>Vistas de página por día (${s.days} días)</h3></div>
     <div class="card__body">
@@ -329,6 +342,7 @@ function comportamientoHtml() {
   const pageRows = (s.top_pages || []).map(p => ({ label: p.page, value: p.total }));
   const navRows = (s.top_nav_clicks || []).map(n => ({ label: n.seccion, value: n.total }));
   const outboundRows = (s.top_outbound_clicks || []).map(o => ({ label: o.destino, value: o.total }));
+  const jobApplicationRows = (s.top_job_applications || []).map(j => ({ label: j.puesto, value: j.total }));
 
   return `
   ${sectionHeading('activity', 'Comportamiento', 'Qué tan lejos llegan los visitantes en la página y con qué elementos interactúan.')}
@@ -369,6 +383,10 @@ function comportamientoHtml() {
       <div class="card__header"><h3>Clicks a links externos</h3></div>
       <div class="card__body">${barListHtml(outboundRows, 'Sin clicks a sitios externos en este rango.')}</div>
     </div>
+  </div>
+  <div class="card" style="margin-top:16px">
+    <div class="card__header"><h3>Postulaciones por oferta (bolsa de trabajo)</h3></div>
+    <div class="card__body">${barListHtml(jobApplicationRows, 'Sin postulaciones en este rango.')}</div>
   </div>`;
 }
 
@@ -489,6 +507,7 @@ const TIMELINE_ICON = {
   page_view: 'eye', case_click: 'external-link', whatsapp_click: 'message-circle',
   chatbot_open: 'message-circle', chatbot_message: 'activity',
   scroll_depth: 'bar-chart-2', time_on_page: 'clock', outbound_click: 'external-link', nav_click: 'map-pin',
+  job_apply_click: 'external-link', job_apply_submit: 'check-circle',
 };
 
 async function openSessionTimeline(sessionId) {
