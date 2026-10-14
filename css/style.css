@@ -571,6 +571,15 @@ label {
 
 .field { margin-bottom: 16px; }
 
+/* input/select/textarea son inline-block por defecto y no llenan su
+   .field contenedor solos — sin esto queda un hueco vacío al lado de
+   cada campo en filas de dos columnas. */
+.field input:not([type="checkbox"]):not([type="radio"]),
+.field select,
+.field textarea {
+  width: 100%;
+}
+
 .field-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
