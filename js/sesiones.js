@@ -10,7 +10,7 @@ let _historyCache = new Map(); // username -> rows (evita repetir la consulta al
 let _historyDays = 30;
 
 const AREA_LABEL_BY_PATH = {
-  ti: 'TI', adg: 'ADG', rrhh: 'RR. HH.', soporte: 'Soporte',
+  ti: 'OTI', adg: 'ADG', rrhh: 'RR. HH.', soporte: 'Soporte',
   security: 'DST · Seguridad', audit: 'Auditoría', auth: 'Autenticación',
 };
 

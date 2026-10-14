@@ -3,7 +3,7 @@ import { icon, escapeHtml, formatDateTime } from './utils.js';
 import { toast } from './ui.js';
 
 const MODULES = [
-  ['TI', 'TI'],
+  ['TI', 'OTI'],
   ['ADG', 'ADG'],
   ['RRHH', 'RR. HH.'],
   ['SOPORTE', 'Soporte'],
