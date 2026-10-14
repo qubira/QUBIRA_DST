@@ -7,6 +7,23 @@ const AREAS = [['DST','DST'],['ADG','ADG'],['TI','OTI'],['RRHH','RR. HH.'],['SOP
 const MEETING_TYPES = ['Revisión de seguridad','Auditoría','Gestión de incidentes','Coordinación con otra área','Capacitación','Otro'];
 const EXTERNAL_KINDS = [['cliente','Cliente'],['postulante','Postulante'],['proveedor','Proveedor'],['consultor','Consultor'],['otro','Otro']];
 const STATUS_LABEL = { scheduled:'Programada', confirmed:'Confirmada', in_progress:'En curso', completed:'Finalizada', cancelled:'Cancelada' };
+const MODALITY_LABEL = { presencial: 'Presencial', virtual: 'Virtual' };
+
+/* Ícono clickeable que resume la modalidad de la reunión: en presencial
+   abre la dirección en Google Maps, en virtual abre el link de ingreso
+   tal cual se guardó. Sin ubicación cargada, solo informa la modalidad. */
+function modalityIconHtml(m) {
+  const isVirtual = m.modality === 'virtual';
+  const iconName = isVirtual ? 'video' : 'map-pin';
+  const label = MODALITY_LABEL[m.modality] || 'Presencial';
+  if (!m.location) {
+    return `<span class="tag" title="${escapeHtml(label)}">${icon(iconName)} ${label}</span>`;
+  }
+  const href = isVirtual
+    ? (/^https?:\/\//i.test(m.location) ? m.location : 'https://' + m.location)
+    : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(m.location)}`;
+  return `<a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer" class="tag" style="text-decoration:none;cursor:pointer" title="${escapeHtml(label + ' · ' + m.location)}" onclick="event.stopPropagation()">${icon(iconName)} ${label}</a>`;
+}
 
 let _mode = 'area';               // 'area' | 'mine' | 'week' | 'weekArea'
 let _filters = { area: OWN_AREA, participant: '', type: '', date_from: todayISO(), date_to: '', status: '' };
@@ -309,6 +326,7 @@ function meetingCard(m) {
           <strong>${escapeHtml(m.title)}</strong>
           <span class="tag">${escapeHtml(m.area)}</span>
           <span class="tag">${statusTag}</span>
+          ${modalityIconHtml(m)}
           ${isBusy ? `<span class="tag">${icon('lock')} Privada</span>` : ''}
         </div>
         <p class="cell-sub" style="margin-top:4px;">${m.start_time.slice(0,5)} — ${m.end_time.slice(0,5)}${m.meeting_type ? ' · ' + escapeHtml(m.meeting_type) : ''}</p>
@@ -380,16 +398,28 @@ function formFieldsHtml(editing) {
           <div class="field"><label>Inicio *</label><input type="time" name="start_time" required value="${editing ? editing.start_time.slice(0,5) : ''}"></div>
           <div class="field"><label>Fin *</label><input type="time" name="end_time" required value="${editing ? editing.end_time.slice(0,5) : ''}"></div>
         </div>
-        <div class="field">
-          <label>Tipo de reunión</label>
-          <select name="meeting_type">
-            <option value="">— Seleccionar —</option>
-            ${MEETING_TYPES.map(t => `<option value="${t}" ${editing?.meeting_type===t?'selected':''}>${t}</option>`).join('')}
-          </select>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+          <div class="field">
+            <label>Tipo de reunión</label>
+            <select name="meeting_type">
+              <option value="">— Seleccionar —</option>
+              ${MEETING_TYPES.map(t => `<option value="${t}" ${editing?.meeting_type===t?'selected':''}>${t}</option>`).join('')}
+            </select>
+          </div>
+          <div class="field">
+            <label>Modalidad</label>
+            <select name="modality">
+              <option value="presencial" ${(editing?.modality || 'presencial')==='presencial'?'selected':''}>Presencial</option>
+              <option value="virtual" ${editing?.modality==='virtual'?'selected':''}>Virtual</option>
+            </select>
+          </div>
         </div>
         <div class="field"><label>Motivo</label><input name="motivo" autocomplete="off" value="${escapeHtml(editing?.motivo || '')}"></div>
         <div class="field"><label>Descripción</label><textarea name="description" rows="2">${escapeHtml(editing?.description || '')}</textarea></div>
-        <div class="field"><label>Ubicación</label><input name="location" placeholder="Sala de reuniones, dirección, link de videollamada..." autocomplete="off" value="${escapeHtml(editing?.location || '')}"></div>
+        <div class="field">
+          <label id="cal-location-label">${(editing?.modality || 'presencial')==='virtual' ? 'Link de la reunión' : 'Dirección'}</label>
+          <input name="location" id="cal-location-input" placeholder="${(editing?.modality || 'presencial')==='virtual' ? 'Link de Zoom, Meet, Teams...' : 'Sala de reuniones, dirección...'}" autocomplete="off" value="${escapeHtml(editing?.location || '')}">
+        </div>
         <div class="field">
           <label>Imagen del evento (opcional)</label>
           ${currentImage ? `
@@ -451,11 +481,23 @@ function openForm(editId) {
   wireFormExtras(modal);
   wireImageControls(modal);
   const form = modal.querySelector('#meeting-form');
-  ['date', 'start_time', 'end_time'].forEach(name => {
+  ['date', 'start_time', 'end_time', 'modality'].forEach(name => {
     const el = form.elements[name];
     if (el) el.addEventListener('change', () => liveCheck(modal));
   });
+  if (form.elements.modality) form.elements.modality.addEventListener('change', () => updateLocationField(modal));
   modal.querySelector('#cal-save-btn').addEventListener('click', () => submitForm(modal));
+}
+
+/* Cambia la etiqueta y el placeholder de Ubicación según la modalidad
+   elegida: Dirección (presencial) o Link de la reunión (virtual). */
+function updateLocationField(modal) {
+  const form = modal.querySelector('#meeting-form');
+  const isVirtual = form.elements.modality?.value === 'virtual';
+  const label = modal.querySelector('#cal-location-label');
+  const input = modal.querySelector('#cal-location-input');
+  if (label) label.textContent = isVirtual ? 'Link de la reunión' : 'Dirección';
+  if (input) input.placeholder = isVirtual ? 'Link de Zoom, Meet, Teams...' : 'Sala de reuniones, dirección...';
 }
 
 /* Vuelve a pintar solo el cuerpo del modal (p. ej. tras subir o quitar
@@ -469,10 +511,11 @@ function rerenderFormBody(modal) {
   wireFormExtras(modal);
   wireImageControls(modal);
   const form = modal.querySelector('#meeting-form');
-  ['date', 'start_time', 'end_time'].forEach(name => {
+  ['date', 'start_time', 'end_time', 'modality'].forEach(name => {
     const el = form.elements[name];
     if (el) el.addEventListener('change', () => liveCheck(modal));
   });
+  if (form.elements.modality) form.elements.modality.addEventListener('change', () => updateLocationField(modal));
 }
 
 function wireImageControls(modal) {
@@ -519,13 +562,26 @@ function selectedExternalsHtml() {
 }
 function conflictBannerHtml() {
   if (!_conflicts.length) return '';
-  return `
-  <div style="border-radius:8px;background:#fef2f2;border:1px solid #fecaca;padding:12px;font-size:13px;color:#b91c1c;margin-top:8px;">
-    <p style="font-weight:600;display:flex;align-items:center;gap:6px;">${icon('alert-triangle')} ${_conflicts.length > 1 ? 'Se encontraron ' + _conflicts.length + ' conflictos:' : 'Conflicto de horario'}</p>
-    <ul style="margin:6px 0 0 18px;padding:0;">
-      ${_conflicts.map(c => `<li>${escapeHtml(c.user_name || 'Alguien')} (${escapeHtml(c.area || '—')}) ya tiene "${escapeHtml(c.meeting_name)}" de ${c.start_time.slice(0,5)} a ${c.end_time.slice(0,5)} (${fmtDateOnly(c.date)}).</li>`).join('')}
-    </ul>
-  </div>`;
+  const hard = _conflicts.filter(c => c.hard);
+  const soft = _conflicts.filter(c => !c.hard);
+  const listItem = c => `<li>${escapeHtml(c.user_name || 'Alguien')} (${escapeHtml(c.area || '—')}) ya tiene "${escapeHtml(c.meeting_name)}" de ${c.start_time.slice(0,5)} a ${c.end_time.slice(0,5)} (${fmtDateOnly(c.date)}).</li>`;
+  let html = '';
+  if (hard.length) {
+    html += `
+    <div style="border-radius:8px;background:#fef2f2;border:1px solid #fecaca;padding:12px;font-size:13px;color:#b91c1c;margin-top:8px;">
+      <p style="font-weight:600;display:flex;align-items:center;gap:6px;">${icon('alert-triangle')} ${hard.length > 1 ? 'Se encontraron ' + hard.length + ' conflictos de horario:' : 'Conflicto de horario'}</p>
+      <ul style="margin:6px 0 0 18px;padding:0;">${hard.map(listItem).join('')}</ul>
+    </div>`;
+  }
+  if (soft.length) {
+    html += `
+    <div style="border-radius:8px;background:#fffbeb;border:1px solid #fde68a;padding:12px;font-size:13px;color:#92400e;margin-top:8px;">
+      <p style="font-weight:600;display:flex;align-items:center;gap:6px;">${icon('alert-triangle')} Hay un cruce de horario (modalidad mixta)</p>
+      <ul style="margin:6px 0 0 18px;padding:0;">${soft.map(listItem).join('')}</ul>
+      <p style="margin-top:6px;">Al ser una presencial y una virtual, igual puedes guardar e inscribir a la persona en ambas.</p>
+    </div>`;
+  }
+  return html;
 }
 
 function wireFormExtras(modal) {
@@ -599,6 +655,7 @@ async function liveCheck(modal) {
   const end = form.elements.end_time.value;
   const saveBtn = modal.querySelector('#cal-save-btn');
   const ids = _selectedParticipants.map(p => p.user_id);
+  const modality = form.elements.modality?.value || 'presencial';
 
   if (!date || !start || !end || !ids.length || end <= start) {
     _conflicts = [];
@@ -610,13 +667,13 @@ async function liveCheck(modal) {
   const token = ++_checkToken;
   let conflicts = [];
   try {
-    const res = await Store.checkAvailability({ date, start_time: start, end_time: end, participant_ids: ids, exclude_meeting_id: _editingId || undefined });
+    const res = await Store.checkAvailability({ date, start_time: start, end_time: end, participant_ids: ids, exclude_meeting_id: _editingId || undefined, modality });
     conflicts = res.conflicts || [];
   } catch { conflicts = []; }
   if (token !== _checkToken) return;
   _conflicts = conflicts;
   modal.querySelector('#cal-conflict-banner').innerHTML = conflictBannerHtml();
-  if (saveBtn) saveBtn.disabled = _conflicts.length > 0;
+  if (saveBtn) saveBtn.disabled = _conflicts.some(c => c.hard);
 }
 
 async function submitForm(modal) {
@@ -627,6 +684,7 @@ async function submitForm(modal) {
   const start_time = form.elements.start_time.value;
   const end_time = form.elements.end_time.value;
   const meeting_type = form.elements.meeting_type.value;
+  const modality = form.elements.modality?.value || 'presencial';
   const location = form.elements.location.value.trim();
   const motivo = form.elements.motivo.value.trim();
   const description = form.elements.description.value.trim();
@@ -639,7 +697,7 @@ async function submitForm(modal) {
   const image_url = _pendingImage !== null ? _pendingImage : (editing?.image_url || null);
 
   const payload = {
-    title, date, start_time, end_time, meeting_type, location, motivo, description, image_url,
+    title, date, start_time, end_time, meeting_type, modality, location, motivo, description, image_url,
     participants: _selectedParticipants.map(p => ({ user_id: p.user_id })),
     external_participants: _externalParticipants,
   };
@@ -691,7 +749,8 @@ function viewMeeting(id) {
         <p><strong>Fecha:</strong> ${fmtDateOnly(m.meeting_date)}</p>
         <p><strong>Horario:</strong> ${m.start_time.slice(0,5)} — ${m.end_time.slice(0,5)}</p>
         ${m.meeting_type ? `<p><strong>Tipo:</strong> ${escapeHtml(m.meeting_type)}</p>` : ''}
-        ${m.location ? `<p><strong>Ubicación:</strong> ${escapeHtml(m.location)}</p>` : ''}
+        <p>${modalityIconHtml(m)}</p>
+        ${m.location ? `<p><strong>${m.modality === 'virtual' ? 'Link' : 'Dirección'}:</strong> ${escapeHtml(m.location)}</p>` : ''}
         ${m.motivo ? `<p><strong>Motivo:</strong> ${escapeHtml(m.motivo)}</p>` : ''}
         ${m.description ? `<div><strong>Descripción:</strong><p style="margin-top:4px;white-space:pre-wrap">${escapeHtml(m.description)}</p></div>` : ''}
         <div><strong>Participantes:</strong><ul style="margin:4px 0 0 18px;padding:0;">${participantsHtml || '<li>Sin participantes</li>'}</ul></div>
