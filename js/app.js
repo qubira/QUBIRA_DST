@@ -1,5 +1,6 @@
 import { Store } from './storage.js';
 import { renderDashboard } from './dashboard.js';
+import { renderCalendario } from './calendario.js';
 import { renderVisitas } from './visitas.js';
 import { renderUsuarios } from './usuarios.js';
 import { renderPermisos } from './permisos.js';
@@ -9,6 +10,7 @@ import { renderAuditoria } from './auditoria.js';
 
 const VIEWS = {
   dashboard: { render: renderDashboard, title: 'Dashboard', subtitle: 'Resumen de seguridad del ecosistema Qubira' },
+  calendario: { render: renderCalendario, title: 'Calendario', subtitle: 'Reuniones de DST e interconexión con otras áreas' },
   visitas: { render: renderVisitas, title: 'Visitas', subtitle: 'Cómo interactúan los visitantes con el sitio público de QUBIRA' },
   usuarios: { render: renderUsuarios, title: 'Usuarios', subtitle: 'Cuentas del sistema, estado y accesos' },
   permisos: { render: renderPermisos, title: 'Permisos', subtitle: 'Módulos otorgados por usuario, más allá de su área' },

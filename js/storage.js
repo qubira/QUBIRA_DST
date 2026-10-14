@@ -83,4 +83,36 @@ export const Store = {
   getAnalyticsSessions: (params) => qdFetch('/api/analytics/sessions' + qs(params)),
   getSessionTimeline: (sessionId) => qdFetch(`/api/analytics/sessions/${encodeURIComponent(sessionId)}/timeline`),
   getAnalyticsEvents: (params) => qdFetch('/api/analytics/events' + qs(params)),
+
+  // Calendario Corporativo — fuente central de reuniones compartida entre
+  // RR.HH., ADG, TI, Soporte y DST (API/src/routes/calendar.js).
+  getMeetings: (params = {}) => qdFetch('/api/calendar/meetings' + qs(params)),
+  checkAvailability: (payload) => qdFetch('/api/calendar/check-availability', { method: 'POST', body: JSON.stringify(payload) }),
+  addMeeting: (payload) => qdFetch('/api/calendar/meetings', { method: 'POST', body: JSON.stringify(payload) }),
+  updateMeeting: (id, payload) => qdFetch(`/api/calendar/meetings/${id}`, { method: 'PUT', body: JSON.stringify(payload) }),
+  cancelMeeting: (id) => qdFetch(`/api/calendar/meetings/${id}/cancel`, { method: 'POST' }),
+  deleteMeeting: (id) => qdFetch(`/api/calendar/meetings/${id}`, { method: 'DELETE' }),
+  searchDirectory: (params = {}) => qdFetch('/api/calendar/directory' + qs(params)),
+  // Imagen opcional de una reunión (sube a Cloudinary vía la API; el
+  // body es FormData, no debe llevar Content-Type: application/json,
+  // así que no pasa por qdFetch).
+  uploadMeetingImage: async (file) => {
+    const token = qdToken();
+    const fd = new FormData();
+    fd.append('image', file);
+    const res = await fetch(QD_API_BASE + '/api/calendar/meetings/image', {
+      method: 'POST',
+      headers: token ? { Authorization: 'Bearer ' + token } : {},
+      body: fd,
+    });
+    if (res.status === 401) {
+      localStorage.removeItem('dst_token');
+      localStorage.removeItem('dst_user');
+      window.location.href = 'login.html';
+      throw new Error('SESSION_EXPIRED');
+    }
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || ('Error ' + res.status));
+    return data.url;
+  },
 };
