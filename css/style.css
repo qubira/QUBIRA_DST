@@ -859,6 +859,13 @@ tbody tr:hover { background: #fafafa; }
 .funnel__meta { width: 100%; display: flex; justify-content: space-between; font-size: 11.5px; color: var(--text-muted); padding: 5px 2px 0; margin-bottom: 4px; }
 
 /* ---------- Chips de permisos ---------- */
+.stat-mini {
+  flex: 1; min-width: 110px; background: var(--gray-bg); border: 1px solid var(--border);
+  border-radius: 10px; padding: 10px 14px; display: flex; flex-direction: column; gap: 2px;
+}
+.stat-mini strong { font-size: 20px; font-weight: 800; color: var(--text); }
+.stat-mini span { font-size: 11px; color: var(--text-muted); }
+
 .module-chip {
   display: inline-flex;
   align-items: center;

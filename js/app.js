@@ -5,6 +5,7 @@ import { renderVisitas } from './visitas.js';
 import { renderUsuarios } from './usuarios.js';
 import { renderPermisos } from './permisos.js';
 import { renderSesiones } from './sesiones.js';
+import { renderBloqueos2fa } from './bloqueos2fa.js';
 import { renderGeolocalizacion } from './geolocalizacion.js';
 import { renderIp } from './ip.js';
 import { renderAuditoria } from './auditoria.js';
@@ -16,6 +17,7 @@ const VIEWS = {
   usuarios: { render: renderUsuarios, title: 'Usuarios', subtitle: 'Cuentas del sistema, estado y accesos' },
   permisos: { render: renderPermisos, title: 'Permisos', subtitle: 'Módulos otorgados por usuario, más allá de su área' },
   sesiones: { render: renderSesiones, title: 'Sesiones', subtitle: 'Sesiones activas en todos los paneles de Qubira' },
+  bloqueos2fa: { render: renderBloqueos2fa, title: 'Bloqueos 2FA', subtitle: 'Cuentas bloqueadas o suspendidas por códigos de verificación en dos pasos incorrectos' },
   geolocalizacion: { render: renderGeolocalizacion, title: 'Geolocalización', subtitle: 'Monitoreo geoespacial en tiempo real y mapa de calor de inicios de sesión' },
   ip: { render: renderIp, title: 'IP', subtitle: 'Observación, bloqueo y autorización de direcciones IP' },
   auditoria: { render: renderAuditoria, title: 'Auditoría', subtitle: 'Registro de movimientos de todo el ecosistema Qubira' },

@@ -60,6 +60,10 @@ export const Store = {
   unsuspendUser: (userId) => qdFetch(`/api/security/users/${userId}/unsuspend`, { method: 'POST' }),
   unlockUser: (userId) => qdFetch(`/api/security/users/${userId}/unlock`, { method: 'POST' }),
 
+  // Bloqueos de 2FA — racha actual + historial de vida por cuenta
+  getTotpLockouts: () => qdFetch('/api/security/totp-lockouts'),
+  getTotpLockoutHistory: (userId) => qdFetch(`/api/security/totp-lockouts/${userId}/history`),
+
   // Sesiones
   getSessions: () => qdFetch('/api/security/sessions'),
   revokeSession: (id) => qdFetch(`/api/security/sessions/${id}`, { method: 'DELETE' }),
