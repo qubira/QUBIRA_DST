@@ -10,6 +10,7 @@ const ACTION_LABEL = {
   account_locked: 'Cuenta bloqueada', ip_blocked: 'Bloqueó IP', ip_status_changed: 'Cambió estado de IP',
   ip_blocked_attempt: 'Intento desde IP bloqueada', ip_marked_suspicious: 'IP marcada sospechosa',
   handoff_used: 'Traspaso de sesión',
+  totp_enabled: 'Activó verificación en dos pasos', totp_disabled: 'Desactivó verificación en dos pasos',
 };
 
 let _rows = [];
