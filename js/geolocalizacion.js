@@ -226,12 +226,16 @@ function switchBasemap(type) {
   _currentBasemap = type;
 
   if (_baseLayerGroup) {
-    _map.removeLayer(_baseLayerGroup);
+    try { _map.removeLayer(_baseLayerGroup); } catch (_) {}
+    _baseLayerGroup = null;
   }
 
-  const layers = BASE_MAPS[type].create();
-  _baseLayerGroup = L.layerGroup(layers).addTo(_map);
-  _baseLayerGroup.bringToBack();
+  try {
+    const layers = BASE_MAPS[type].create();
+    _baseLayerGroup = L.layerGroup(layers).addTo(_map);
+  } catch (err) {
+    console.error('[GEO] Error creando capa base:', err);
+  }
 
   ['calles', 'satelite', 'oscuro'].forEach(k => {
     document.getElementById(`btn-base-${k}`)?.classList.toggle('active', k === type);
@@ -262,8 +266,12 @@ function initMap() {
   }
 
   if (_map) {
-    _map.remove();
+    try { _map.remove(); } catch (_) {}
     _map = null;
+    _markersLayer = null;
+    _routeLayer = null;
+    _baseLayerGroup = null;
+    _heatLayer = null;
   }
 
   const mapEl = document.getElementById('geo-map');
@@ -277,11 +285,12 @@ function initMap() {
     maxZoom: 20, // Permite zoom ultra-cercano a nivel de edificio y calle
   });
 
-  // Cargar capa base inicial
-  switchBasemap(_currentBasemap);
-
+  // Inicializar capas de marcadores antes de cualquier otra cosa
   _markersLayer = L.layerGroup().addTo(_map);
   _routeLayer = L.layerGroup().addTo(_map);
+
+  // Cargar capa base inicial
+  switchBasemap(_currentBasemap);
 
   // Asegurar tamaño correcto del lienzo Leaflet
   setTimeout(() => { if (_map) _map.invalidateSize(); }, 200);
@@ -400,6 +409,13 @@ function updateMapLayers() {
   }
 
   // 2. Capa de marcadores y círculos de precisión GPS
+  if (!_markersLayer && _map) {
+    _markersLayer = L.layerGroup().addTo(_map);
+  }
+  if (!_routeLayer && _map) {
+    _routeLayer = L.layerGroup().addTo(_map);
+  }
+
   if (_markersLayer) {
     _markersLayer.clearLayers();
   }
@@ -424,7 +440,9 @@ function updateMapLayers() {
         weight: 1,
         dashArray: '3, 4'
       });
-      _markersLayer.addLayer(accuracyCircle);
+      if (_markersLayer) {
+        _markersLayer.addLayer(accuracyCircle);
+      }
 
       const pinClass = isSuspended
         ? 'suspended'
@@ -514,7 +532,9 @@ function updateMapLayers() {
         resolveAddress(lat, lng, loc.id, loc.address);
       });
 
-      marker.addTo(_markersLayer);
+      if (_markersLayer) {
+        marker.addTo(_markersLayer);
+      }
       _markersById[loc.id] = marker;
     });
   }
