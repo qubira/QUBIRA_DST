@@ -3,19 +3,66 @@ import { icon, escapeHtml, formatDateTime } from './utils.js';
 import { confirmDialog, openModal, closeModal, toast } from './ui.js';
 
 let _map = null;
+let _baseLayerGroup = null;
+let _currentBasemap = 'calles'; // 'calles' | 'satelite' | 'oscuro'
 let _heatLayer = null;
 let _markersLayer = null;
 let _routeLayer = null;
+let _markersById = {}; // Mapeo de id de login a Marker de Leaflet
 let _locationsData = [];
 let _activeSessions = [];
-let _activeMode = 'hybrid'; // 'heat' | 'markers' | 'hybrid'
+let _activeMode = 'markers'; // 'markers' (por defecto más nítido) | 'hybrid' | 'heat'
 let _searchFilter = '';
 let _periodFilter = 'all'; // 'all' | 'today' | 'active'
 let _selectedUserId = null;
+const _addressCache = {}; // Cache local para geocodificación inversa
 
 // Centro de Perú para el mapa
 const PERU_CENTER = [-9.189967, -75.015152];
 const PERU_ZOOM = 6;
+
+// Configuración de capas base sin marcas de agua y con soporte de zoom ultra-alto
+const BASE_MAPS = {
+  calles: {
+    name: 'Calles (OSM)',
+    create: () => [
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+        subdomains: ['a', 'b', 'c'],
+        maxZoom: 20,
+        maxNativeZoom: 19
+      })
+    ]
+  },
+  satelite: {
+    name: 'Satélite HD',
+    create: () => [
+      L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+        attribution: '&copy; Esri World Imagery',
+        maxZoom: 20,
+        maxNativeZoom: 19
+      }),
+      L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', {
+        maxZoom: 20,
+        maxNativeZoom: 19
+      })
+    ]
+  },
+  oscuro: {
+    name: 'Modo Oscuro',
+    create: () => [
+      L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}', {
+        attribution: '&copy; Esri Dark Canvas',
+        maxZoom: 20,
+        maxNativeZoom: 16 // Evita pantalla negra escalando dinámicamente las teselas
+      }),
+      L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}', {
+        maxZoom: 20,
+        maxNativeZoom: 16
+      })
+    ]
+  }
+};
 
 export function renderGeolocalizacion() {
   const container = document.getElementById('view-geolocalizacion');
@@ -72,24 +119,29 @@ export function renderGeolocalizacion() {
         <div class="geo-map-header">
           <div class="geo-map-title">
             <svg class="icon" style="color:var(--primary);"><use href="#icon-map-pin"></use></svg>
-            <span>Mapa Geoespacial y Mapa de Calor — Perú</span>
+            <span>Mapa Geoespacial y Calidad GPS — Perú</span>
           </div>
 
           <div class="geo-map-tools">
-            <button class="geo-pill-btn active" id="btn-mode-hybrid" title="Ver calor y marcadores">
-              🗺️ Híbrido
-            </button>
-            <button class="geo-pill-btn" id="btn-mode-heat" title="Solo mapa de calor">
-              🔥 Mapa de Calor
-            </button>
-            <button class="geo-pill-btn" id="btn-mode-markers" title="Solo marcadores">
-              📍 Puntos GPS
-            </button>
+            <!-- Selector de mapa base -->
+            <div class="geo-pill-group" title="Capa de mapa base">
+              <button class="geo-pill-btn active" id="btn-base-calles">🛣️ Calles</button>
+              <button class="geo-pill-btn" id="btn-base-satelite">🛰️ Satélite HD</button>
+              <button class="geo-pill-btn" id="btn-base-oscuro">🌙 Oscuro</button>
+            </div>
+
+            <!-- Modos de visualización -->
+            <div class="geo-pill-group" title="Modo de visualización de datos">
+              <button class="geo-pill-btn active" id="btn-mode-markers">📍 Puntos GPS</button>
+              <button class="geo-pill-btn" id="btn-mode-hybrid">🗺️ Híbrido</button>
+              <button class="geo-pill-btn" id="btn-mode-heat">🔥 Calor</button>
+            </div>
+
             <button class="geo-pill-btn" id="btn-focus-peru" title="Re-centrar en Perú">
-              🇵🇪 Enfocar Perú
+              🇵🇪 Perú
             </button>
             <button class="geo-pill-btn" id="btn-refresh-geo" title="Actualizar datos">
-              🔄 Actualizar
+              🔄
             </button>
           </div>
         </div>
@@ -107,7 +159,7 @@ export function renderGeolocalizacion() {
 
           <div class="geo-search-wrap">
             <svg viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
-            <input type="text" id="geo-search-input" placeholder="Buscar por usuario, nombre, IP...">
+            <input type="text" id="geo-search-input" placeholder="Buscar por usuario, nombre, IP, calle...">
           </div>
 
           <div style="display:flex; gap:6px; margin-top:10px;">
@@ -130,9 +182,15 @@ export function renderGeolocalizacion() {
 }
 
 function setupEventListeners() {
+  // Conmutadores de capa base
+  document.getElementById('btn-base-calles')?.addEventListener('click', () => switchBasemap('calles'));
+  document.getElementById('btn-base-satelite')?.addEventListener('click', () => switchBasemap('satelite'));
+  document.getElementById('btn-base-oscuro')?.addEventListener('click', () => switchBasemap('oscuro'));
+
+  // Modos de datos
+  document.getElementById('btn-mode-markers')?.addEventListener('click', () => setMode('markers'));
   document.getElementById('btn-mode-hybrid')?.addEventListener('click', () => setMode('hybrid'));
   document.getElementById('btn-mode-heat')?.addEventListener('click', () => setMode('heat'));
-  document.getElementById('btn-mode-markers')?.addEventListener('click', () => setMode('markers'));
 
   document.getElementById('btn-focus-peru')?.addEventListener('click', () => {
     if (_map) _map.flyTo(PERU_CENTER, PERU_ZOOM, { duration: 1 });
@@ -163,9 +221,26 @@ function setupEventListeners() {
   window.refreshGeoData = loadData;
 }
 
+function switchBasemap(type) {
+  if (!_map || !BASE_MAPS[type]) return;
+  _currentBasemap = type;
+
+  if (_baseLayerGroup) {
+    _map.removeLayer(_baseLayerGroup);
+  }
+
+  const layers = BASE_MAPS[type].create();
+  _baseLayerGroup = L.layerGroup(layers).addTo(_map);
+  _baseLayerGroup.bringToBack();
+
+  ['calles', 'satelite', 'oscuro'].forEach(k => {
+    document.getElementById(`btn-base-${k}`)?.classList.toggle('active', k === type);
+  });
+}
+
 function setMode(mode) {
   _activeMode = mode;
-  ['hybrid', 'heat', 'markers'].forEach(m => {
+  ['markers', 'hybrid', 'heat'].forEach(m => {
     document.getElementById(`btn-mode-${m}`)?.classList.toggle('active', m === mode);
   });
   updateMapLayers();
@@ -199,19 +274,11 @@ function initMap() {
     zoom: PERU_ZOOM,
     zoomControl: true,
     minZoom: 4,
-    maxZoom: 18,
+    maxZoom: 20, // Permite zoom ultra-cercano a nivel de edificio y calle
   });
 
-  // Capa base oscura Esri World Dark Gray Canvas (100% gratuita, sin marcas de agua)
-  L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}', {
-    attribution: '&copy; Esri, HERE, Garmin, OpenStreetMap',
-    maxZoom: 16
-  }).addTo(_map);
-
-  // Capa de referencias, fronteras y etiquetas de ciudades
-  L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}', {
-    maxZoom: 16
-  }).addTo(_map);
+  // Cargar capa base inicial
+  switchBasemap(_currentBasemap);
 
   _markersLayer = L.layerGroup().addTo(_map);
   _routeLayer = L.layerGroup().addTo(_map);
@@ -253,7 +320,7 @@ async function loadData() {
           .filter(([lat, lng]) => !isNaN(lat) && !isNaN(lng));
         if (validCoords.length > 0) {
           const bounds = L.latLngBounds(validCoords);
-          _map.fitBounds(bounds, { maxZoom: 13, padding: [60, 60] });
+          _map.fitBounds(bounds, { maxZoom: 15, padding: [60, 60] });
         }
       }, 350);
     }
@@ -301,6 +368,7 @@ function updateMapLayers() {
   if (!_map) return;
 
   const filtered = getFilteredLocations();
+  _markersById = {};
 
   // 1. Capa de calor (Heatmap)
   if (_heatLayer) {
@@ -312,14 +380,14 @@ function updateMapLayers() {
     const heatPoints = filtered.map(l => [
       parseFloat(l.latitude),
       parseFloat(l.longitude),
-      0.8 // intensidad
+      0.75
     ]);
 
     if (heatPoints.length > 0) {
       _heatLayer = L.heatLayer(heatPoints, {
-        radius: 28,
-        blur: 16,
-        maxZoom: 14,
+        radius: 20,
+        blur: 14,
+        maxZoom: 18,
         gradient: {
           0.2: '#3b82f6',
           0.4: '#06b6d4',
@@ -331,7 +399,7 @@ function updateMapLayers() {
     }
   }
 
-  // 2. Capa de marcadores
+  // 2. Capa de marcadores y círculos de precisión GPS
   if (_markersLayer) {
     _markersLayer.clearLayers();
   }
@@ -344,6 +412,19 @@ function updateMapLayers() {
 
       const isSuspended = loc.usuario_estado === 'suspendido';
       const isActiveSession = _activeSessions.some(s => s.usuario_id === loc.usuario_id);
+      const accuracy = Math.round(loc.accuracy || 0);
+
+      // Círculo de precisión GPS (muestra el margen exacto de certeza)
+      const accRadius = Math.max(accuracy, 12);
+      const accuracyCircle = L.circle([lat, lng], {
+        radius: accRadius,
+        color: isSuspended ? '#ef4444' : (isActiveSession ? '#10b981' : '#3b82f6'),
+        fillColor: isSuspended ? '#ef4444' : (isActiveSession ? '#10b981' : '#3b82f6'),
+        fillOpacity: 0.12,
+        weight: 1,
+        dashArray: '3, 4'
+      });
+      _markersLayer.addLayer(accuracyCircle);
 
       const pinClass = isSuspended
         ? 'suspended'
@@ -362,6 +443,18 @@ function updateMapLayers() {
 
       const initials = ((loc.nombre?.[0] || loc.username?.[0] || '?') + (loc.apellidos?.[0] || '')).toUpperCase();
 
+      // Calidad de precisión GPS
+      let accBadgeHtml = '';
+      if (accuracy > 0) {
+        if (accuracy <= 30) {
+          accBadgeHtml = `<span class="geo-acc-badge excelente">±${accuracy}m · Alta precisión</span>`;
+        } else if (accuracy <= 150) {
+          accBadgeHtml = `<span class="geo-acc-badge aceptable">±${accuracy}m · Precisión media</span>`;
+        } else {
+          accBadgeHtml = `<span class="geo-acc-badge aproximado">±${accuracy}m · Red/WiFi</span>`;
+        }
+      }
+
       const popupHtml = `
         <div class="geo-popup-wrap">
           <div class="geo-popup-content">
@@ -376,10 +469,16 @@ function updateMapLayers() {
             <div style="margin-bottom:6px;">
               <span style="color:#94a3b8;">📍 Coordenadas:</span> <strong style="color:#e2e8f0;">${lat.toFixed(6)}, ${lng.toFixed(6)}</strong>
             </div>
-            <div style="margin-bottom:6px;">
-              <span style="color:#94a3b8;">🎯 Precisión GPS:</span> <strong style="color:#e2e8f0;">±${Math.round(loc.accuracy || 0)} metros</strong>
+            <div style="margin-bottom:6px; display:flex; align-items:center; justify-content:space-between;">
+              <span style="color:#94a3b8;">🎯 Margen GPS:</span>
+              ${accBadgeHtml || `<strong style="color:#e2e8f0;">±${accuracy}m</strong>`}
             </div>
-            ${loc.address ? `<div style="margin-bottom:6px;"><span style="color:#94a3b8;">🗺️ Ubicación:</span> <strong style="color:#e2e8f0;">${escapeHtml(loc.address)}</strong></div>` : ''}
+            <div style="margin-bottom:6px;" id="popup-addr-wrap-${loc.id}">
+              <span style="color:#94a3b8;">🗺️ Ubicación:</span>
+              <strong style="color:#38bdf8; display:block; font-size:11.5px;" id="popup-addr-${loc.id}">
+                ${escapeHtml(loc.address || 'Consultando calle...')}
+              </strong>
+            </div>
             <div style="margin-bottom:6px;">
               <span style="color:#94a3b8;">🌐 IP de Acceso:</span> <strong style="color:#e2e8f0;">${escapeHtml(loc.ip_address || 'No registrada')}</strong>
             </div>
@@ -392,12 +491,15 @@ function updateMapLayers() {
             </div>
 
             <div class="geo-popup-actions">
+              <a href="https://www.google.com/maps?q=${lat},${lng}" target="_blank" rel="noopener" class="geo-btn-action btn-gmaps" title="Abrir en Google Maps / Street View">
+                📍 Google Maps
+              </a>
               <button class="geo-btn-action btn-fly" onclick="window.traceUserRoute(${loc.usuario_id}, '${escapeHtml(loc.username)}')">
-                🧭 Trazar Recorrido
+                🧭 Recorrido
               </button>
               ${isSuspended
                 ? `<button class="geo-btn-action btn-unsuspend" onclick="window.quickUnsuspendUser(${loc.usuario_id})">✓ Reactivar</button>`
-                : `<button class="geo-btn-action btn-suspend" onclick="window.quickSuspendUser(${loc.usuario_id}, '${escapeHtml(loc.username)}', ${lat}, ${lng})">🚫 Suspender Cuenta</button>`
+                : `<button class="geo-btn-action btn-suspend" onclick="window.quickSuspendUser(${loc.usuario_id}, '${escapeHtml(loc.username)}', ${lat}, ${lng})">🚫 Suspender</button>`
               }
             </div>
           </div>
@@ -405,10 +507,45 @@ function updateMapLayers() {
       `;
 
       const marker = L.marker([lat, lng], { icon: customIcon });
-      marker.bindPopup(popupHtml, { maxWidth: 320 });
+      marker.bindPopup(popupHtml, { maxWidth: 330 });
+
+      // Consultar dirección en calle al abrir el popup si no viene en DB
+      marker.on('popupopen', () => {
+        resolveAddress(lat, lng, loc.id, loc.address);
+      });
+
       marker.addTo(_markersLayer);
+      _markersById[loc.id] = marker;
     });
   }
+}
+
+function resolveAddress(lat, lng, locId, existingAddr) {
+  if (existingAddr) return;
+  const key = `${lat.toFixed(4)},${lng.toFixed(4)}`;
+  const popupAddrEl = document.getElementById(`popup-addr-${locId}`);
+  const cardAddrEl = document.getElementById(`card-addr-${locId}`);
+
+  if (_addressCache[key]) {
+    if (popupAddrEl) popupAddrEl.textContent = _addressCache[key];
+    if (cardAddrEl) cardAddrEl.textContent = _addressCache[key];
+    return;
+  }
+
+  fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&accept-language=es`)
+    .then(r => r.ok ? r.json() : null)
+    .then(data => {
+      if (data && data.display_name) {
+        _addressCache[key] = data.display_name;
+        if (popupAddrEl) popupAddrEl.textContent = data.display_name;
+        if (cardAddrEl) cardAddrEl.textContent = data.display_name;
+      } else {
+        if (popupAddrEl) popupAddrEl.textContent = 'Dirección no disponible';
+      }
+    })
+    .catch(() => {
+      if (popupAddrEl) popupAddrEl.textContent = 'Ubicación registrada';
+    });
 }
 
 function renderLoginsList() {
@@ -434,11 +571,12 @@ function renderLoginsList() {
     const isActiveSession = _activeSessions.some(s => s.usuario_id === loc.usuario_id);
     const isSelected = _selectedUserId === loc.usuario_id;
     const initials = ((loc.nombre?.[0] || loc.username?.[0] || '?') + (loc.apellidos?.[0] || '')).toUpperCase();
+    const accuracy = Math.round(loc.accuracy || 0);
 
     const timeAgo = getTimeAgo(loc.created_at);
 
     return `
-      <div class="geo-card ${isSelected ? 'selected' : ''}" id="geocard-${loc.id}" onclick="window.flyToLocation(${lat}, ${lng}, ${loc.usuario_id})">
+      <div class="geo-card ${isSelected ? 'selected' : ''}" id="geocard-${loc.id}" onclick="window.flyToLocation(${lat}, ${lng}, ${loc.id}, ${loc.usuario_id})">
         <div class="geo-card-head">
           <div class="geo-card-user">
             <div class="geo-card-avatar" style="${isActiveSession ? 'background:#ecfdf5;color:#059669;' : ''}">
@@ -456,15 +594,20 @@ function renderLoginsList() {
         </div>
 
         <div class="geo-card-details">
-          <div><strong>GPS:</strong> ${lat.toFixed(5)}, ${lng.toFixed(5)} <span style="color:#059669;font-weight:600;">(±${Math.round(loc.accuracy || 0)}m)</span></div>
+          <div><strong>GPS:</strong> ${lat.toFixed(5)}, ${lng.toFixed(5)} <span style="color:#059669;font-weight:600;">(±${accuracy}m)</span></div>
+          ${loc.address ? `<div style="color:#475569;font-size:11px;margin:2px 0;">📍 ${escapeHtml(loc.address)}</div>` : `<div style="color:#64748b;font-size:11px;margin:2px 0;" id="card-addr-${loc.id}"></div>`}
           <div><strong>IP:</strong> ${escapeHtml(loc.ip_address || '-')} · <strong>Hora:</strong> ${timeAgo} (${formatDateTime(loc.created_at)})</div>
         </div>
 
         <div class="geo-card-actions" onclick="event.stopPropagation()">
-          <button class="geo-btn-action btn-fly" onclick="window.flyToLocation(${lat}, ${lng}, ${loc.usuario_id})" title="Centrar mapa en este punto">
+          <button class="geo-btn-action btn-fly" onclick="window.flyToLocation(${lat}, ${lng}, ${loc.id}, ${loc.usuario_id})" title="Centrar mapa en la calle exacta de este usuario">
             <svg class="icon" style="width:13px;height:13px;"><use href="#icon-map-pin"></use></svg>
-            Centrar
+            Centrar Calle
           </button>
+
+          <a href="https://www.google.com/maps?q=${lat},${lng}" target="_blank" rel="noopener" class="geo-btn-action btn-gmaps" title="Abrir en Google Maps / Street View">
+            📍 Maps
+          </a>
 
           <button class="geo-btn-action" onclick="window.traceUserRoute(${loc.usuario_id}, '${escapeHtml(loc.username)}')" title="Ver historial de accesos">
             🧭 Recorrido
@@ -485,12 +628,24 @@ function renderLoginsList() {
   }).join('');
 }
 
-function flyToLocation(lat, lng, userId) {
+function flyToLocation(lat, lng, locId, userId) {
   _selectedUserId = userId;
   document.querySelectorAll('.geo-card').forEach(c => c.classList.remove('selected'));
+  if (locId) {
+    const card = document.getElementById(`geocard-${locId}`);
+    if (card) card.classList.add('selected');
+  }
 
   if (_map && !isNaN(lat) && !isNaN(lng)) {
-    _map.flyTo([lat, lng], 15, { duration: 1.2 });
+    // Zoom directo a nivel de calle (nivel 18)
+    _map.flyTo([lat, lng], 18, { duration: 1.2 });
+
+    // Abrir automáticamente el popup del marcador
+    setTimeout(() => {
+      if (locId && _markersById[locId]) {
+        _markersById[locId].openPopup();
+      }
+    }, 1300);
   }
 }
 
@@ -511,7 +666,7 @@ async function traceUserRoute(userId, username) {
 
     if (history.length === 1) {
       const pt = [parseFloat(history[0].latitude), parseFloat(history[0].longitude)];
-      _map.flyTo(pt, 14, { duration: 1 });
+      _map.flyTo(pt, 18, { duration: 1 });
       toast(`@${username} tiene un único punto registrado en el mapa.`, 'info');
       return;
     }

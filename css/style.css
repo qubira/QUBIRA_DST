@@ -1054,6 +1054,30 @@ tbody tr:hover { background: #fafafa; }
   box-shadow: 0 2px 6px rgba(79,70,229,0.25);
 }
 
+.geo-pill-group {
+  display: inline-flex;
+  align-items: center;
+  background: #f1f5f9;
+  padding: 2px;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  gap: 2px;
+}
+.geo-pill-group .geo-pill-btn {
+  border: none;
+  background: transparent;
+  padding: 4px 10px;
+  font-size: 11px;
+}
+.geo-pill-group .geo-pill-btn:hover {
+  background: #e2e8f0;
+}
+.geo-pill-group .geo-pill-btn.active {
+  background: var(--primary);
+  color: #fff;
+  box-shadow: 0 2px 5px rgba(79,70,229,0.25);
+}
+
 #geo-map {
   flex: 1;
   width: 100%;
@@ -1224,6 +1248,20 @@ tbody tr:hover { background: #fafafa; }
 .geo-btn-action.btn-unsuspend:hover { background: #d1fae5; }
 .geo-btn-action.btn-fly { color: var(--primary); border-color: #c7d2fe; }
 .geo-btn-action.btn-fly:hover { background: #eef2ff; }
+.geo-btn-action.btn-gmaps { color: #dc2626; border-color: #fecaca; text-decoration: none; }
+.geo-btn-action.btn-gmaps:hover { background: #fef2f2; }
+
+.geo-acc-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+.geo-acc-badge.excelente { background: #d1fae5; color: #047857; }
+.geo-acc-badge.aceptable { background: #fef3c7; color: #b45309; }
+.geo-acc-badge.aproximado { background: #fee2e2; color: #b91c1c; }
 
 /* Custom Marker Pin Animation */
 .geo-marker-pin {
