@@ -5,7 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>QUBIRA DST | Seguridad y Tráfico</title>
 <link rel="icon" href="https://raw.githubusercontent.com/qubira/IMAGENES/main/logo2.png" type="image/png">
-<link rel="stylesheet" href="css/style.css?v=1">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+<link rel="stylesheet" href="css/style.css?v=2">
 </head>
 <body>
 
@@ -70,6 +71,7 @@
       <button class="nav-item" data-view="sesiones"><svg class="icon"><use href="#icon-clock"></use></svg> Sesiones</button>
 
       <div class="nav-section-label">Seguridad</div>
+      <button class="nav-item" data-view="geolocalizacion"><svg class="icon"><use href="#icon-map-pin"></use></svg> Geolocalización</button>
       <button class="nav-item" data-view="ip"><svg class="icon"><use href="#icon-globe"></use></svg> IP</button>
       <button class="nav-item" data-view="auditoria"><svg class="icon"><use href="#icon-eye"></use></svg> Auditoría</button>
     </nav>
@@ -111,6 +113,7 @@
       <section class="view" id="view-usuarios"></section>
       <section class="view" id="view-permisos"></section>
       <section class="view" id="view-sesiones"></section>
+      <section class="view" id="view-geolocalizacion"></section>
       <section class="view" id="view-ip"></section>
       <section class="view" id="view-auditoria"></section>
     </main>
@@ -121,6 +124,8 @@
 <div class="modal-overlay" id="modal-overlay"></div>
 <div id="toast-container"></div>
 
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
 <script type="module" src="js/app.js"></script>
 </body>
 </html>

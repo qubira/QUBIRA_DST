@@ -73,6 +73,10 @@ export const Store = {
   // Auditoría (comparte /api/audit/logs con los 4 paneles)
   getAuditLogs: (params) => qdFetch('/api/audit/logs' + qs(params)),
 
+  // Geolocalización y mapa de calor
+  getLocations: () => qdFetch('/api/security/locations'),
+  getUserLocationHistory: (userId) => qdFetch(`/api/security/locations/history/${userId}`),
+
   // Dashboard y amenazas
   getDashboard: () => qdFetch('/api/security/dashboard'),
   getThreats: () => qdFetch('/api/security/threats'),
