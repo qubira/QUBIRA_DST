@@ -155,11 +155,12 @@ function setupEventListeners() {
   document.getElementById('filter-period-today')?.addEventListener('click', () => setPeriod('today'));
   document.getElementById('filter-period-active')?.addEventListener('click', () => setPeriod('active'));
 
-  // Exponer funciones globales para popups de Leaflet
+  // Exponer funciones globales para popups de Leaflet y reintentos
   window.traceUserRoute = traceUserRoute;
   window.quickSuspendUser = promptSuspendUser;
   window.quickUnsuspendUser = promptUnsuspendUser;
   window.flyToLocation = flyToLocation;
+  window.refreshGeoData = loadData;
 }
 
 function setMode(mode) {
@@ -201,45 +202,71 @@ function initMap() {
     maxZoom: 18,
   });
 
-  // Capa base CartoDB DarkMatter (Modo oscuro corporativo)
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-    attribution: '&copy; <a href="https://carto.com/">CARTO</a> &copy; OpenStreetMap',
-    subdomains: 'abcd',
-    maxZoom: 19
+  // Capa base oscura Esri World Dark Gray Canvas (100% gratuita, sin marcas de agua)
+  L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}', {
+    attribution: '&copy; Esri, HERE, Garmin, OpenStreetMap',
+    maxZoom: 16
+  }).addTo(_map);
+
+  // Capa de referencias, fronteras y etiquetas de ciudades
+  L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}', {
+    maxZoom: 16
   }).addTo(_map);
 
   _markersLayer = L.layerGroup().addTo(_map);
   _routeLayer = L.layerGroup().addTo(_map);
+
+  // Asegurar tamaño correcto del lienzo Leaflet
+  setTimeout(() => { if (_map) _map.invalidateSize(); }, 200);
+  setTimeout(() => { if (_map) _map.invalidateSize(); }, 600);
 }
 
 async function loadData() {
+  const listEl = document.getElementById('geo-logins-list');
   try {
     const data = await Store.getLocations();
     _locationsData = data.locations || [];
     _activeSessions = data.active || [];
 
     // Actualizar KPIs
-    document.getElementById('kpi-total-locations').textContent = _locationsData.length;
-    document.getElementById('kpi-unique-users').textContent = data.stats?.unique_users || new Set(_locationsData.map(l => l.usuario_id)).size;
-    document.getElementById('kpi-active-gps').textContent = _activeSessions.length;
+    const kpiTotal = document.getElementById('kpi-total-locations');
+    const kpiUsers = document.getElementById('kpi-unique-users');
+    const kpiActive = document.getElementById('kpi-active-gps');
+    const kpiSuspended = document.getElementById('kpi-suspended-users');
+
+    if (kpiTotal) kpiTotal.textContent = _locationsData.length;
+    if (kpiUsers) kpiUsers.textContent = data.stats?.unique_users || new Set(_locationsData.map(l => l.usuario_id)).size;
+    if (kpiActive) kpiActive.textContent = _activeSessions.length;
 
     const suspendedCount = new Set(_locationsData.filter(l => l.usuario_estado === 'suspendido').map(l => l.usuario_id)).size;
-    document.getElementById('kpi-suspended-users').textContent = suspendedCount;
+    if (kpiSuspended) kpiSuspended.textContent = suspendedCount;
 
     renderLoginsList();
     updateMapLayers();
 
-    // Si hay datos, ajustar la vista inicial si es relevante
+    // Centrar mapa suavemente abarcando los puntos registrados
     if (_locationsData.length > 0 && _map) {
-      setTimeout(() => _map.invalidateSize(), 200);
+      setTimeout(() => {
+        _map.invalidateSize();
+        const validCoords = _locationsData
+          .map(l => [parseFloat(l.latitude), parseFloat(l.longitude)])
+          .filter(([lat, lng]) => !isNaN(lat) && !isNaN(lng));
+        if (validCoords.length > 0) {
+          const bounds = L.latLngBounds(validCoords);
+          _map.fitBounds(bounds, { maxZoom: 13, padding: [60, 60] });
+        }
+      }, 350);
     }
   } catch (err) {
     console.error('[GEO] Error cargando ubicaciones:', err);
-    toast('No se pudieron cargar los datos de geolocalización', 'error');
-    document.getElementById('geo-logins-list').innerHTML = `
-      <div class="empty-state">
-        <p style="color:var(--danger)">Error al consultar la base de datos de ubicaciones.</p>
-      </div>`;
+    toast(err.message || 'Error al consultar la base de datos de ubicaciones', 'error');
+    if (listEl) {
+      listEl.innerHTML = `
+        <div class="empty-state" style="padding:28px 16px;text-align:center;">
+          <p style="color:var(--danger);font-weight:600;margin-bottom:8px;">${escapeHtml(err.message || 'Error al consultar la base de datos de ubicaciones.')}</p>
+          <button class="btn btn-sm btn-primary" onclick="window.refreshGeoData()">Reintentar Consulta</button>
+        </div>`;
+    }
   }
 }
 
