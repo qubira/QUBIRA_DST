@@ -3,7 +3,7 @@ import { openModal, closeModal, confirmDialog, toast } from './ui.js';
 import { icon, escapeHtml } from './utils.js';
 
 const OWN_AREA = 'DST';
-const AREAS = [['DST','DST'],['ADG','ADG'],['TI','OTI'],['RRHH','RR. HH.'],['SOPORTE','Soporte']];
+const AREAS = [['DST','DST'],['ADG','ADG'],['TI','OTI'],['RRHH','RR. HH.'],['SOPORTE','Soporte'],['COMERCIAL','Comercial'],['OPP','OPP']];
 const MEETING_TYPES = ['Revisión de seguridad','Auditoría','Gestión de incidentes','Coordinación con otra área','Capacitación','Otro'];
 const EXTERNAL_KINDS = [['cliente','Cliente'],['postulante','Postulante'],['proveedor','Proveedor'],['consultor','Consultor'],['otro','Otro']];
 const STATUS_LABEL = { scheduled:'Programada', confirmed:'Confirmada', in_progress:'En curso', completed:'Finalizada', cancelled:'Cancelada' };

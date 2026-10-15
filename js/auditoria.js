@@ -1,7 +1,7 @@
 import { Store } from './storage.js';
 import { icon, escapeHtml, formatDateTimeSec } from './utils.js';
 
-const AREAS = [['RRHH', 'RR. HH.'], ['ADG', 'ADG'], ['TI', 'OTI'], ['SOPORTE', 'Soporte']];
+const AREAS = [['RRHH', 'RR. HH.'], ['ADG', 'ADG'], ['TI', 'OTI'], ['SOPORTE', 'Soporte'], ['COMERCIAL', 'Comercial'], ['OPP', 'OPP']];
 const ACTION_LABEL = {
   view: 'Consultó', create: 'Creó', update: 'Actualizó', delete: 'Eliminó',
   login: 'Inició sesión', logout: 'Cerró sesión', access_denied: 'Acceso denegado',
