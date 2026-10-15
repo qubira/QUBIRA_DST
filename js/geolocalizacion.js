@@ -596,7 +596,7 @@ function renderLoginsList() {
     const timeAgo = getTimeAgo(loc.created_at);
 
     return `
-      <div class="geo-card ${isSelected ? 'selected' : ''}" id="geocard-${loc.id}" onclick="window.flyToLocation(${lat}, ${lng}, ${loc.id}, ${loc.usuario_id})">
+      <div class="geo-card ${isSelected ? 'selected' : ''}" id="geocard-${loc.id}" onclick="window.flyToLocation(${lat}, ${lng}, '${loc.id}', ${loc.usuario_id})">
         <div class="geo-card-head">
           <div class="geo-card-user">
             <div class="geo-card-avatar" style="${isActiveSession ? 'background:#ecfdf5;color:#059669;' : ''}">
@@ -620,9 +620,9 @@ function renderLoginsList() {
         </div>
 
         <div class="geo-card-actions" onclick="event.stopPropagation()">
-          <button class="geo-btn-action btn-fly" onclick="window.flyToLocation(${lat}, ${lng}, ${loc.id}, ${loc.usuario_id})" title="Centrar mapa en la calle exacta de este usuario">
+          <button class="geo-btn-action btn-fly" onclick="window.flyToLocation(${lat}, ${lng}, '${loc.id}', ${loc.usuario_id})" title="Centrar mapa en este acceso">
             <svg class="icon" style="width:13px;height:13px;"><use href="#icon-map-pin"></use></svg>
-            Centrar Calle
+            Centrar
           </button>
 
           <a href="https://www.google.com/maps?q=${lat},${lng}" target="_blank" rel="noopener" class="geo-btn-action btn-gmaps" title="Abrir en Google Maps / Street View">
