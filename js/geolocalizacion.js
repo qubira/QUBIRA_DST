@@ -1,6 +1,7 @@
 import { Store } from './storage.js';
 import { icon, escapeHtml, formatDateTime } from './utils.js';
 import { confirmDialog, openModal, closeModal, toast } from './ui.js';
+import { isPointInPolygon, distanceToPolygon, calculateCentroid, calculatePolygonAreaKm2 } from './geo-utils.js';
 
 let _map = null;
 let _baseLayerGroup = null;
@@ -8,14 +9,25 @@ let _currentBasemap = 'calles'; // 'calles' | 'satelite' | 'oscuro'
 let _heatLayer = null;
 let _markersLayer = null;
 let _routeLayer = null;
+let _geofenceLayer = null;
 let _markersById = {}; // Mapeo de id de login a Marker de Leaflet
 let _locationsData = [];
 let _activeSessions = [];
-let _activeMode = 'markers'; // 'markers' (por defecto más nítido) | 'hybrid' | 'heat'
+let _activeMode = 'markers'; // 'markers' | 'hybrid' | 'heat'
 let _searchFilter = '';
-let _periodFilter = 'all'; // 'all' | 'today' | 'active'
+let _periodFilter = 'all'; // 'all' | 'today' | 'active' | 'out_of_bounds'
 let _selectedUserId = null;
 const _addressCache = {}; // Cache local para geocodificación inversa
+
+// Geocerca y Perímetro
+let _geofence = null;
+let _isDrawingMode = false;
+let _drawingPoints = [];
+let _drawingMarkers = [];
+let _drawingLine = null;
+let _drawingPolygonPreview = null;
+let _outOfBoundsLocations = [];
+let _showPerimeter = true;
 
 // Centro de Perú para el mapa
 const PERU_CENTER = [-9.189967, -75.015152];
@@ -54,7 +66,7 @@ const BASE_MAPS = {
       L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}', {
         attribution: '&copy; Esri Dark Canvas',
         maxZoom: 20,
-        maxNativeZoom: 16 // Evita pantalla negra escalando dinámicamente las teselas
+        maxNativeZoom: 16
       }),
       L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}', {
         maxZoom: 20,
@@ -91,13 +103,13 @@ export function renderGeolocalizacion() {
         </div>
       </div>
 
-      <div class="geo-kpi-card">
-        <div class="geo-kpi-icon amber">
-          <svg class="icon"><use href="#icon-clock"></use></svg>
+      <div class="geo-kpi-card" style="border-left:4px solid var(--danger);">
+        <div class="geo-kpi-icon red">
+          <svg class="icon"><use href="#icon-alert-triangle"></use></svg>
         </div>
         <div>
-          <div class="geo-kpi-num" id="kpi-active-gps">-</div>
-          <div class="geo-kpi-label">Sesiones Activas con GPS</div>
+          <div class="geo-kpi-num" id="kpi-out-of-bounds" style="color:var(--danger);">-</div>
+          <div class="geo-kpi-label">Fuera de Perímetro (Sospechoso Alto)</div>
         </div>
       </div>
 
@@ -137,12 +149,53 @@ export function renderGeolocalizacion() {
               <button class="geo-pill-btn" id="btn-mode-heat">🔥 Calor</button>
             </div>
 
+            <!-- Herramientas de Perímetro de Seguridad -->
+            <div class="geo-pill-group" title="Gestión de Perímetro de Logeo">
+              <button class="geo-pill-btn" id="btn-tool-draw-perimeter" title="Trazar nuevo perímetro en el mapa">
+                ✏️ Dibujar Perímetro
+              </button>
+              <button class="geo-pill-btn" id="btn-tool-toggle-perimeter" title="Mostrar/ocultar zona segura">
+                🛡️ Ver Zona
+              </button>
+              <button class="geo-pill-btn" id="btn-tool-clear-perimeter" title="Borrar perímetro configurado" style="display:none;color:#ef4444;">
+                🗑️ Borrar
+              </button>
+            </div>
+
+            <button class="geo-pill-btn btn-danger-pill" id="btn-jump-alerts-rep" title="Ver reporte forense completo de alertas fuera de perímetro" style="color:#b91c1c;background:#fee2e2;border-color:#fca5a5;">
+              🚨 Fuera de Rango (<span id="btn-alert-count-pill">0</span>)
+            </button>
+
             <button class="geo-pill-btn" id="btn-focus-peru" title="Re-centrar en Perú">
               🇵🇪 Perú
             </button>
             <button class="geo-pill-btn" id="btn-refresh-geo" title="Actualizar datos">
               🔄
             </button>
+          </div>
+        </div>
+
+        <!-- Banner Flotante de Alerta si hay accesos fuera de rango -->
+        <div class="geo-perimeter-alert-banner" id="geo-perimeter-alert-banner" style="display:none;">
+          <div style="display:flex;align-items:center;gap:10px;">
+            <span class="pulsing-red-dot"></span>
+            <span>🚨 <strong>ALERTA CRÍTICA:</strong> Se detectaron <strong id="banner-out-count">0</strong> inicio(s) de sesión <strong>FUERA del perímetro seguro corporativo</strong> (Sospechoso Alto).</span>
+          </div>
+          <button class="btn btn-sm btn-danger" onclick="window.navigateToView('alertas-perimetrales')">
+            Ver Reporte Forense ➔
+          </button>
+        </div>
+
+        <!-- Barra Flotante de Modo Dibujo de Geocerca -->
+        <div class="geo-drawing-floating-bar" id="geo-drawing-bar" style="display:none;">
+          <div class="geo-drawing-info">
+            <strong>✏️ Modo Dibujo de Perímetro Seguro Activo</strong>
+            <span>Haz clic en el mapa para marcar los vértices de la geocerca corporativa. (<strong id="draw-point-count">0</strong> vértices colocados)</span>
+          </div>
+          <div class="geo-drawing-actions">
+            <button class="btn btn-sm btn-secondary" id="btn-draw-undo">↶ Deshacer Punto</button>
+            <button class="btn btn-sm btn-primary" id="btn-draw-save">💾 Guardar Perímetro</button>
+            <button class="btn btn-sm btn-secondary" id="btn-draw-cancel">✕ Cancelar</button>
           </div>
         </div>
 
@@ -162,10 +215,13 @@ export function renderGeolocalizacion() {
             <input type="text" id="geo-search-input" placeholder="Buscar por usuario, nombre, IP, calle...">
           </div>
 
-          <div style="display:flex; gap:6px; margin-top:10px;">
-            <button class="geo-pill-btn active" id="filter-period-all" style="flex:1; justify-content:center; padding:4px 8px; font-size:11px;">Todos</button>
-            <button class="geo-pill-btn" id="filter-period-today" style="flex:1; justify-content:center; padding:4px 8px; font-size:11px;">Hoy</button>
-            <button class="geo-pill-btn" id="filter-period-active" style="flex:1; justify-content:center; padding:4px 8px; font-size:11px;">Activos</button>
+          <div style="display:flex; gap:5px; margin-top:10px; flex-wrap:wrap;">
+            <button class="geo-pill-btn active" id="filter-period-all" style="flex:1; justify-content:center; padding:4px 6px; font-size:11px;">Todos</button>
+            <button class="geo-pill-btn" id="filter-period-today" style="flex:1; justify-content:center; padding:4px 6px; font-size:11px;">Hoy</button>
+            <button class="geo-pill-btn" id="filter-period-active" style="flex:1; justify-content:center; padding:4px 6px; font-size:11px;">Activos</button>
+            <button class="geo-pill-btn" id="filter-period-out" style="flex:1.2; justify-content:center; padding:4px 6px; font-size:11px; color:#b91c1c;" title="Filtrar accesos sospechosos altos fuera de perímetro">
+              🚨 Fuera de Rango (<span id="filter-badge-out">0</span>)
+            </button>
           </div>
         </div>
 
@@ -192,13 +248,27 @@ function setupEventListeners() {
   document.getElementById('btn-mode-hybrid')?.addEventListener('click', () => setMode('hybrid'));
   document.getElementById('btn-mode-heat')?.addEventListener('click', () => setMode('heat'));
 
+  // Herramientas de dibujo y gestión de perímetro
+  document.getElementById('btn-tool-draw-perimeter')?.addEventListener('click', startDrawingPerimeter);
+  document.getElementById('btn-tool-toggle-perimeter')?.addEventListener('click', togglePerimeter);
+  document.getElementById('btn-tool-clear-perimeter')?.addEventListener('click', promptClearPerimeter);
+
+  // Acciones en la barra flotante de dibujo
+  document.getElementById('btn-draw-undo')?.addEventListener('click', undoDrawingPoint);
+  document.getElementById('btn-draw-save')?.addEventListener('click', saveDrawingPerimeter);
+  document.getElementById('btn-draw-cancel')?.addEventListener('click', cancelDrawingPerimeter);
+
+  document.getElementById('btn-jump-alerts-rep')?.addEventListener('click', () => {
+    if (window.navigateToView) window.navigateToView('alertas-perimetrales');
+  });
+
   document.getElementById('btn-focus-peru')?.addEventListener('click', () => {
     if (_map) _map.flyTo(PERU_CENTER, PERU_ZOOM, { duration: 1 });
   });
 
   document.getElementById('btn-refresh-geo')?.addEventListener('click', () => {
     loadData();
-    toast('Actualizando datos de geolocalización...', 'info');
+    toast('Actualizando datos de geolocalización y geocercas...', 'info');
   });
 
   const searchInput = document.getElementById('geo-search-input');
@@ -212,13 +282,15 @@ function setupEventListeners() {
   document.getElementById('filter-period-all')?.addEventListener('click', () => setPeriod('all'));
   document.getElementById('filter-period-today')?.addEventListener('click', () => setPeriod('today'));
   document.getElementById('filter-period-active')?.addEventListener('click', () => setPeriod('active'));
+  document.getElementById('filter-period-out')?.addEventListener('click', () => setPeriod('out_of_bounds'));
 
-  // Exponer funciones globales para popups de Leaflet y reintentos
+  // Exponer funciones globales para popups de Leaflet y enlaces externos
   window.traceUserRoute = traceUserRoute;
   window.quickSuspendUser = promptSuspendUser;
   window.quickUnsuspendUser = promptUnsuspendUser;
   window.flyToLocation = flyToLocation;
   window.refreshGeoData = loadData;
+  window.startDrawingPerimeterOnMap = startDrawingPerimeter;
 }
 
 function switchBasemap(type) {
@@ -252,8 +324,9 @@ function setMode(mode) {
 
 function setPeriod(period) {
   _periodFilter = period;
-  ['all', 'today', 'active'].forEach(p => {
-    document.getElementById(`filter-period-${p}`)?.classList.toggle('active', p === period);
+  ['all', 'today', 'active', 'out'].forEach(p => {
+    const idKey = p === 'out' ? 'out' : p;
+    document.getElementById(`filter-period-${idKey}`)?.classList.toggle('active', period === (p === 'out' ? 'out_of_bounds' : p));
   });
   renderLoginsList();
   updateMapLayers();
@@ -272,6 +345,7 @@ function initMap() {
     _routeLayer = null;
     _baseLayerGroup = null;
     _heatLayer = null;
+    _geofenceLayer = null;
   }
 
   const mapEl = document.getElementById('geo-map');
@@ -281,47 +355,80 @@ function initMap() {
     center: PERU_CENTER,
     zoom: PERU_ZOOM,
     zoomControl: true,
-    minZoom: 4,
-    maxZoom: 20, // Permite zoom ultra-cercano a nivel de edificio y calle
+    minZoom: 3,
+    maxZoom: 20
   });
 
-  // Inicializar capas de marcadores antes de cualquier otra cosa
   _markersLayer = L.layerGroup().addTo(_map);
   _routeLayer = L.layerGroup().addTo(_map);
 
-  // Cargar capa base inicial
   switchBasemap(_currentBasemap);
 
-  // Asegurar tamaño correcto del lienzo Leaflet
+  // Escuchar clics en el mapa para dibujo interactivo
+  _map.on('click', handleMapClick);
+
   setTimeout(() => { if (_map) _map.invalidateSize(); }, 200);
   setTimeout(() => { if (_map) _map.invalidateSize(); }, 600);
+
+  // Verificar si hay salto programado desde el reporte forense o solicitud de dibujo
+  checkPendingActions();
+}
+
+function checkPendingActions() {
+  const jumpTarget = sessionStorage.getItem('qubira_dst_jump_target');
+  if (jumpTarget) {
+    sessionStorage.removeItem('qubira_dst_jump_target');
+    try {
+      const { lat, lng, locId, userId } = JSON.parse(jumpTarget);
+      setTimeout(() => {
+        flyToLocation(lat, lng, locId, userId);
+      }, 700);
+    } catch (_) {}
+  }
+
+  const shouldDraw = sessionStorage.getItem('qubira_dst_activate_drawing');
+  if (shouldDraw) {
+    sessionStorage.removeItem('qubira_dst_activate_drawing');
+    setTimeout(() => {
+      startDrawingPerimeter();
+    }, 500);
+  }
 }
 
 async function loadData() {
   const listEl = document.getElementById('geo-logins-list');
   try {
-    const data = await Store.getLocations();
-    _locationsData = data.locations || [];
-    _activeSessions = data.active || [];
+    const [locationsRes, geofenceRes] = await Promise.all([
+      Store.getLocations().catch(() => ({ locations: [], active: [] })),
+      Store.getGeofence()
+    ]);
+
+    const simLocations = Store.getSimulatedLocations();
+    _locationsData = [...simLocations, ...(locationsRes.locations || [])];
+    _activeSessions = locationsRes.active || [];
+    _geofence = geofenceRes;
+
+    evaluatePerimeterContainment();
 
     // Actualizar KPIs
     const kpiTotal = document.getElementById('kpi-total-locations');
     const kpiUsers = document.getElementById('kpi-unique-users');
-    const kpiActive = document.getElementById('kpi-active-gps');
+    const kpiOut = document.getElementById('kpi-out-of-bounds');
     const kpiSuspended = document.getElementById('kpi-suspended-users');
 
     if (kpiTotal) kpiTotal.textContent = _locationsData.length;
-    if (kpiUsers) kpiUsers.textContent = data.stats?.unique_users || new Set(_locationsData.map(l => l.usuario_id)).size;
-    if (kpiActive) kpiActive.textContent = _activeSessions.length;
+    if (kpiUsers) kpiUsers.textContent = new Set(_locationsData.map(l => l.usuario_id)).size;
+    if (kpiOut) kpiOut.textContent = _outOfBoundsLocations.length;
 
     const suspendedCount = new Set(_locationsData.filter(l => l.usuario_estado === 'suspendido').map(l => l.usuario_id)).size;
     if (kpiSuspended) kpiSuspended.textContent = suspendedCount;
 
+    renderPerimeterOnMap();
     renderLoginsList();
     updateMapLayers();
 
-    // Centrar mapa suavemente abarcando los puntos registrados
-    if (_locationsData.length > 0 && _map) {
+    // Centrar suavemente en los puntos o en el perímetro si existe
+    if (_locationsData.length > 0 && _map && !_selectedUserId) {
       setTimeout(() => {
         _map.invalidateSize();
         const validCoords = _locationsData
@@ -346,16 +453,297 @@ async function loadData() {
   }
 }
 
+/**
+ * Evalúa si cada punto de inicio de sesión cae dentro o fuera de la geocerca.
+ */
+function evaluatePerimeterContainment() {
+  _outOfBoundsLocations = [];
+
+  const hasPerimeter = _geofence && _geofence.points && _geofence.points.length >= 3;
+
+  _locationsData.forEach(loc => {
+    const lat = parseFloat(loc.latitude);
+    const lng = parseFloat(loc.longitude);
+    if (isNaN(lat) || isNaN(lng)) return;
+
+    if (!hasPerimeter) {
+      loc.isOutOfPerimeter = false;
+      loc.riskLevel = 'NORMAL';
+      loc.distanceOutKm = 0;
+      return;
+    }
+
+    const inside = isPointInPolygon([lat, lng], _geofence.points);
+    if (!inside) {
+      loc.isOutOfPerimeter = true;
+      loc.riskLevel = 'SOSPECHOSO ALTO';
+      loc.distanceOutKm = distanceToPolygon([lat, lng], _geofence.points);
+      _outOfBoundsLocations.push(loc);
+    } else {
+      loc.isOutOfPerimeter = false;
+      loc.riskLevel = 'NORMAL';
+      loc.distanceOutKm = 0;
+    }
+  });
+
+  // Actualizar banners y botones de alertas
+  updatePerimeterAlertUI();
+}
+
+function updatePerimeterAlertUI() {
+  const count = _outOfBoundsLocations.length;
+  const alertBanner = document.getElementById('geo-perimeter-alert-banner');
+  const bannerCount = document.getElementById('banner-out-count');
+  const alertCountPill = document.getElementById('btn-alert-count-pill');
+  const filterBadgeOut = document.getElementById('filter-badge-out');
+  const clearBtn = document.getElementById('btn-tool-clear-perimeter');
+  const toggleBtn = document.getElementById('btn-tool-toggle-perimeter');
+
+  if (alertBanner) {
+    alertBanner.style.display = count > 0 ? 'flex' : 'none';
+  }
+  if (bannerCount) bannerCount.textContent = count;
+  if (alertCountPill) alertCountPill.textContent = count;
+  if (filterBadgeOut) filterBadgeOut.textContent = count;
+
+  // Actualizar contador del menú lateral en index.html
+  const navAlertCounter = document.getElementById('nav-alert-counter');
+  if (navAlertCounter) {
+    navAlertCounter.textContent = count;
+    navAlertCounter.style.display = count > 0 ? 'inline-block' : 'none';
+  }
+
+  const hasPerimeter = _geofence && _geofence.points && _geofence.points.length >= 3;
+  if (clearBtn) clearBtn.style.display = hasPerimeter ? 'inline-flex' : 'none';
+  if (toggleBtn) {
+    toggleBtn.textContent = _showPerimeter ? '🛡️ Ocultar Zona' : '🛡️ Mostrar Zona';
+  }
+}
+
+/**
+ * Renderiza el polígono de la geocerca corporativa en el mapa.
+ */
+function renderPerimeterOnMap() {
+  if (!_map) return;
+
+  if (_geofenceLayer) {
+    try { _map.removeLayer(_geofenceLayer); } catch (_) {}
+    _geofenceLayer = null;
+  }
+
+  if (!_showPerimeter || !_geofence || !_geofence.points || _geofence.points.length < 3) {
+    return;
+  }
+
+  try {
+    _geofenceLayer = L.polygon(_geofence.points, {
+      color: '#10b981',
+      weight: 3,
+      opacity: 0.9,
+      dashArray: '6, 6',
+      fillColor: '#10b981',
+      fillOpacity: 0.14
+    }).addTo(_map);
+
+    const centroid = calculateCentroid(_geofence.points);
+    const areaKm2 = calculatePolygonAreaKm2(_geofence.points).toFixed(1);
+
+    _geofenceLayer.bindTooltip(`
+      <div style="font-size:12px;font-weight:700;color:#065f46;">
+        🛡️ ${escapeHtml(_geofence.name || 'Perímetro Corporativo Autorizado')}<br>
+        <span style="font-size:10.5px;font-weight:normal;color:#047857;">Área autorizada: ~${areaKm2} km² · ${_geofence.points.length} vértices</span>
+      </div>
+    `, { permanent: false, sticky: true });
+
+  } catch (err) {
+    console.error('[GEO] Error renderizando perímetro:', err);
+  }
+}
+
+function togglePerimeter() {
+  _showPerimeter = !_showPerimeter;
+  renderPerimeterOnMap();
+  updatePerimeterAlertUI();
+  toast(_showPerimeter ? 'Zona segura visible en el mapa' : 'Zona segura oculta', 'info');
+}
+
+/**
+ * MODO DIBUJO INTERACTIVO DE PERÍMETRO
+ */
+function startDrawingPerimeter() {
+  if (!_map) return;
+  _isDrawingMode = true;
+  _drawingPoints = [];
+
+  // Ocultar capa actual mientras se dibuja
+  if (_geofenceLayer) {
+    try { _map.removeLayer(_geofenceLayer); } catch (_) {}
+  }
+
+  clearDrawingLayers();
+
+  const bar = document.getElementById('geo-drawing-bar');
+  if (bar) bar.style.display = 'flex';
+  const countEl = document.getElementById('draw-point-count');
+  if (countEl) countEl.textContent = '0';
+
+  // Cambiar cursor a cruz para precisión
+  const mapEl = document.getElementById('geo-map');
+  if (mapEl) mapEl.style.cursor = 'crosshair';
+
+  toast('🟢 Modo Dibujo Activo: Haz clic en el mapa para marcar los vértices del perímetro.', 'info');
+}
+
+function handleMapClick(e) {
+  if (!_isDrawingMode || !_map) return;
+
+  const lat = e.latlng.lat;
+  const lng = e.latlng.lng;
+  _drawingPoints.push([lat, lng]);
+
+  updateDrawingVisuals();
+}
+
+function updateDrawingVisuals() {
+  if (!_map) return;
+
+  const countEl = document.getElementById('draw-point-count');
+  if (countEl) countEl.textContent = _drawingPoints.length;
+
+  clearDrawingLayers();
+
+  // Colocar marcadores en cada vértice dibujado
+  _drawingPoints.forEach((pt, index) => {
+    const marker = L.circleMarker(pt, {
+      radius: 6,
+      fillColor: '#10b981',
+      color: '#ffffff',
+      weight: 2,
+      opacity: 1,
+      fillOpacity: 1
+    }).addTo(_map);
+
+    marker.bindTooltip(`Vértice #${index + 1}`, { permanent: false });
+    _drawingMarkers.push(marker);
+  });
+
+  // Línea poligonal que conecta los vértices
+  if (_drawingPoints.length >= 2) {
+    _drawingLine = L.polyline(_drawingPoints, {
+      color: '#059669',
+      weight: 3,
+      dashArray: '5, 5',
+      opacity: 0.95
+    }).addTo(_map);
+  }
+
+  // Si tiene 3 o más puntos, mostrar previsualización de polígono cerrado
+  if (_drawingPoints.length >= 3) {
+    _drawingPolygonPreview = L.polygon(_drawingPoints, {
+      color: '#10b981',
+      weight: 2,
+      dashArray: '3, 4',
+      fillColor: '#34d399',
+      fillOpacity: 0.25
+    }).addTo(_map);
+  }
+}
+
+function undoDrawingPoint() {
+  if (_drawingPoints.length === 0) return;
+  _drawingPoints.pop();
+  updateDrawingVisuals();
+  toast('Último punto removido', 'info');
+}
+
+async function saveDrawingPerimeter() {
+  if (_drawingPoints.length < 3) {
+    toast('Se requieren al menos 3 puntos para delimitar un perímetro cerrado.', 'warning');
+    return;
+  }
+
+  const newGeofence = {
+    name: 'Perímetro Corporativo Autorizado',
+    points: _drawingPoints,
+    updated_at: new Date().toISOString(),
+    active: true
+  };
+
+  try {
+    await Store.saveGeofence(newGeofence);
+    _geofence = newGeofence;
+    _showPerimeter = true;
+    exitDrawingMode();
+
+    toast(`✅ ¡Perímetro seguro guardado exitosamente con ${_drawingPoints.length} vértices!`, 'success');
+    loadData();
+  } catch (err) {
+    toast('Error al guardar el perímetro', 'error');
+  }
+}
+
+function cancelDrawingPerimeter() {
+  exitDrawingMode();
+  renderPerimeterOnMap();
+  toast('Dibujo de perímetro cancelado', 'info');
+}
+
+function exitDrawingMode() {
+  _isDrawingMode = false;
+  _drawingPoints = [];
+  clearDrawingLayers();
+
+  const bar = document.getElementById('geo-drawing-bar');
+  if (bar) bar.style.display = 'none';
+
+  const mapEl = document.getElementById('geo-map');
+  if (mapEl) mapEl.style.cursor = '';
+}
+
+function clearDrawingLayers() {
+  if (_map) {
+    _drawingMarkers.forEach(m => { try { _map.removeLayer(m); } catch (_) {} });
+    _drawingMarkers = [];
+    if (_drawingLine) { try { _map.removeLayer(_drawingLine); } catch (_) {} _drawingLine = null; }
+    if (_drawingPolygonPreview) { try { _map.removeLayer(_drawingPolygonPreview); } catch (_) {} _drawingPolygonPreview = null; }
+  }
+}
+
+async function promptClearPerimeter() {
+  const ok = await confirmDialog('¿Deseas eliminar el perímetro seguro actual? Al eliminarlo, ya no se generarán alertas automáticas de "Sospechoso Alto" por ubicación.', {
+    title: 'Borrar Perímetro Seguro',
+    confirmLabel: 'Borrar Perímetro',
+    danger: true
+  });
+
+  if (!ok) return;
+
+  try {
+    await Store.deleteGeofence();
+    _geofence = null;
+    if (_geofenceLayer && _map) {
+      try { _map.removeLayer(_geofenceLayer); } catch (_) {}
+      _geofenceLayer = null;
+    }
+    toast('Perímetro eliminado', 'success');
+    loadData();
+  } catch (err) {
+    toast('Error al eliminar perímetro', 'error');
+  }
+}
+
 function getFilteredLocations() {
   let list = [..._locationsData];
 
-  // Filtro por período
+  // Filtro por período o infracción de perímetro
   if (_periodFilter === 'today') {
     const today = new Date().toISOString().slice(0, 10);
     list = list.filter(l => (l.created_at || '').slice(0, 10) === today);
   } else if (_periodFilter === 'active') {
     const activeUserIds = new Set(_activeSessions.map(s => s.usuario_id));
     list = list.filter(l => activeUserIds.has(l.usuario_id));
+  } else if (_periodFilter === 'out_of_bounds') {
+    list = list.filter(l => l.isOutOfPerimeter);
   }
 
   // Filtro por texto de búsqueda
@@ -428,35 +816,45 @@ function updateMapLayers() {
 
       const isSuspended = loc.usuario_estado === 'suspendido';
       const isActiveSession = _activeSessions.some(s => s.usuario_id === loc.usuario_id);
+      const isOut = loc.isOutOfPerimeter;
       const accuracy = Math.round(loc.accuracy || 0);
 
-      // Círculo de precisión GPS (muestra el margen exacto de certeza)
+      // Círculo de precisión GPS
       const accRadius = Math.max(accuracy, 12);
+      const circleColor = isOut ? '#dc2626' : (isSuspended ? '#ef4444' : (isActiveSession ? '#10b981' : '#3b82f6'));
+
       const accuracyCircle = L.circle([lat, lng], {
         radius: accRadius,
-        color: isSuspended ? '#ef4444' : (isActiveSession ? '#10b981' : '#3b82f6'),
-        fillColor: isSuspended ? '#ef4444' : (isActiveSession ? '#10b981' : '#3b82f6'),
-        fillOpacity: 0.12,
-        weight: 1,
-        dashArray: '3, 4'
+        color: circleColor,
+        fillColor: circleColor,
+        fillOpacity: isOut ? 0.22 : 0.12,
+        weight: isOut ? 2 : 1,
+        dashArray: isOut ? '2, 3' : '3, 4'
       });
       if (_markersLayer) {
         _markersLayer.addLayer(accuracyCircle);
       }
 
-      const pinClass = isSuspended
-        ? 'suspended'
-        : (isActiveSession ? 'active-session' : '');
+      // Marcador de Leaflet con estilo dinámico
+      let pinClass = '';
+      if (isOut) {
+        pinClass = 'out-of-bounds'; // Pulsación roja intensa con icono de alerta
+      } else if (isSuspended) {
+        pinClass = 'suspended';
+      } else if (isActiveSession) {
+        pinClass = 'active-session';
+      }
 
       const customIcon = L.divIcon({
         className: 'geo-marker-wrapper',
         html: `
           <div class="geo-marker-pin ${pinClass}">
             <div class="geo-marker-pulse"></div>
+            ${isOut ? `<div class="geo-marker-warn-badge">⚠️</div>` : ''}
           </div>
         `,
-        iconSize: [24, 24],
-        iconAnchor: [12, 12]
+        iconSize: [26, 26],
+        iconAnchor: [13, 13]
       });
 
       const initials = ((loc.nombre?.[0] || loc.username?.[0] || '?') + (loc.apellidos?.[0] || '')).toUpperCase();
@@ -476,8 +874,18 @@ function updateMapLayers() {
       const popupHtml = `
         <div class="geo-popup-wrap">
           <div class="geo-popup-content">
+            ${isOut ? `
+              <div class="geo-popup-alert-header">
+                <span class="pulsing-red-dot"></span>
+                <strong>🚨 ALERTA: SOSPECHOSO ALTO</strong>
+                <div style="font-size:11px;font-weight:normal;margin-top:2px;color:#fee2e2;">
+                  Inicio reportado fuera del perímetro (+${loc.distanceOutKm.toFixed(1)} km del límite)
+                </div>
+              </div>
+            ` : ''}
+
             <div class="geo-popup-header">
-              <div class="geo-card-avatar" style="background:#3b82f6;color:#fff;">${initials}</div>
+              <div class="geo-card-avatar" style="${isOut ? 'background:#fee2e2;color:#b91c1c;' : 'background:#3b82f6;color:#fff;'}">${initials}</div>
               <div>
                 <strong style="color:#fff;font-size:13px;display:block;">${escapeHtml(loc.nombre || loc.username)} ${escapeHtml(loc.apellidos || '')}</strong>
                 <span style="color:#94a3b8;font-size:11.5px;">@${escapeHtml(loc.username)} · ${escapeHtml(loc.rol || loc.area || 'Usuario')}</span>
@@ -505,7 +913,7 @@ function updateMapLayers() {
             </div>
             <div style="margin-bottom:8px;">
               <span style="color:#94a3b8;">🛡️ Estado de Cuenta:</span>
-              <span class="geo-card-status ${isSuspended ? 'suspendido' : 'activo'}">${isSuspended ? 'Suspendido' : 'Activo'}</span>
+              <span class="geo-card-status ${isSuspended ? 'suspendido' : 'activo'}">${isSuspended ? 'Suspendido' : (isActiveSession ? 'Activo (En vivo)' : 'Registrado')}</span>
             </div>
 
             <div class="geo-popup-actions">
@@ -519,21 +927,25 @@ function updateMapLayers() {
                 ? `<button class="geo-btn-action btn-unsuspend" onclick="window.quickUnsuspendUser(${loc.usuario_id})">✓ Reactivar</button>`
                 : `<button class="geo-btn-action btn-suspend" onclick="window.quickSuspendUser(${loc.usuario_id}, '${escapeHtml(loc.username)}', ${lat}, ${lng})">🚫 Suspender</button>`
               }
+              ${isOut ? `
+                <button class="geo-btn-action" style="grid-column: span 2; background:#fee2e2; color:#b91c1c; border-color:#fca5a5; font-weight:700;" onclick="window.navigateToView('alertas-perimetrales')">
+                  📄 Abrir en Reporte Forense ➔
+                </button>
+              ` : ''}
             </div>
           </div>
         </div>
       `;
 
       const marker = L.marker([lat, lng], { icon: customIcon });
-      marker.bindPopup(popupHtml, { maxWidth: 330 });
+      marker.bindPopup(popupHtml, { maxWidth: 340 });
 
-      // Consultar dirección en calle al abrir el popup si no viene en DB
       marker.on('popupopen', () => {
         resolveAddress(lat, lng, loc.id, loc.address);
       });
 
       if (_markersLayer) {
-        marker.addTo(_markersLayer);
+        _markersLayer.addLayer(marker);
       }
       _markersById[loc.id] = marker;
     });
@@ -590,16 +1002,23 @@ function renderLoginsList() {
     const isSuspended = loc.usuario_estado === 'suspendido';
     const isActiveSession = _activeSessions.some(s => s.usuario_id === loc.usuario_id);
     const isSelected = _selectedUserId === loc.usuario_id;
+    const isOut = loc.isOutOfPerimeter;
     const initials = ((loc.nombre?.[0] || loc.username?.[0] || '?') + (loc.apellidos?.[0] || '')).toUpperCase();
     const accuracy = Math.round(loc.accuracy || 0);
-
     const timeAgo = getTimeAgo(loc.created_at);
 
     return `
-      <div class="geo-card ${isSelected ? 'selected' : ''}" id="geocard-${loc.id}" onclick="window.flyToLocation(${lat}, ${lng}, '${loc.id}', ${loc.usuario_id})">
+      <div class="geo-card ${isSelected ? 'selected' : ''} ${isOut ? 'out-of-bounds-card' : ''}" id="geocard-${loc.id}" onclick="window.flyToLocation(${lat}, ${lng}, '${loc.id}', ${loc.usuario_id})">
+        ${isOut ? `
+          <div class="card-out-of-bounds-tag">
+            <span class="pulsing-red-dot"></span>
+            <strong>🚨 SOSPECHOSO ALTO</strong> · Fuera de Perímetro (+${loc.distanceOutKm.toFixed(1)} km)
+          </div>
+        ` : ''}
+
         <div class="geo-card-head">
           <div class="geo-card-user">
-            <div class="geo-card-avatar" style="${isActiveSession ? 'background:#ecfdf5;color:#059669;' : ''}">
+            <div class="geo-card-avatar" style="${isOut ? 'background:#fee2e2;color:#b91c1c;' : (isActiveSession ? 'background:#ecfdf5;color:#059669;' : '')}">
               ${initials}
             </div>
             <div>
@@ -608,8 +1027,8 @@ function renderLoginsList() {
             </div>
           </div>
 
-          <span class="geo-card-status ${isSuspended ? 'suspendido' : 'activo'}">
-            ${isSuspended ? 'Suspendido' : (isActiveSession ? 'Activo (En vivo)' : 'Registrado')}
+          <span class="geo-card-status ${isSuspended ? 'suspendido' : (isOut ? 'sospechoso-alto' : 'activo')}">
+            ${isSuspended ? 'Suspendido' : (isOut ? 'Sospechoso Alto' : (isActiveSession ? 'Activo (En vivo)' : 'Registrado'))}
           </span>
         </div>
 
@@ -653,14 +1072,15 @@ function flyToLocation(lat, lng, locId, userId) {
   document.querySelectorAll('.geo-card').forEach(c => c.classList.remove('selected'));
   if (locId) {
     const card = document.getElementById(`geocard-${locId}`);
-    if (card) card.classList.add('selected');
+    if (card) {
+      card.classList.add('selected');
+      card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
   }
 
   if (_map && !isNaN(lat) && !isNaN(lng)) {
-    // Zoom directo a nivel de calle (nivel 18)
     _map.flyTo([lat, lng], 18, { duration: 1.2 });
 
-    // Abrir automáticamente el popup del marcador
     setTimeout(() => {
       if (locId && _markersById[locId]) {
         _markersById[locId].openPopup();
@@ -693,7 +1113,6 @@ async function traceUserRoute(userId, username) {
 
     const latLngs = history.map(h => [parseFloat(h.latitude), parseFloat(h.longitude)]);
 
-    // Dibujar línea poligonal conectando los puntos
     const polyline = L.polyline(latLngs, {
       color: '#4f46e5',
       weight: 4,
@@ -703,7 +1122,6 @@ async function traceUserRoute(userId, username) {
       lineJoin: 'round'
     }).addTo(_routeLayer);
 
-    // Agregar marcadores numerados de recorrido
     history.forEach((h, idx) => {
       const pt = [parseFloat(h.latitude), parseFloat(h.longitude)];
       const isLatest = idx === history.length - 1;
@@ -747,7 +1165,7 @@ function promptSuspendUser(userId, username, lat, lng) {
 
       <form id="suspend-geo-form">
         <label style="display:block; font-size:12px; font-weight:600; margin-bottom:6px;">Motivo de suspensión:</label>
-        <textarea name="motivo" rows="3" class="input" style="width:100%;font-size:12.5px;padding:8px;" required>Acceso detectado en ubicación geográfica no autorizada o sospechosa.</textarea>
+        <textarea name="motivo" rows="3" class="input" style="width:100%;font-size:12.5px;padding:8px;" required>Acceso detectado en ubicación geográfica no autorizada o fuera del perímetro seguro.</textarea>
       </form>
     `,
     footerHtml: `
@@ -763,7 +1181,6 @@ function promptSuspendUser(userId, username, lat, lng) {
 
     try {
       await Store.suspendUser(userId, motivo);
-      // Revocar sesiones activas del usuario por seguridad
       await Store.revokeAllSessions(userId).catch(() => {});
 
       closeModal();

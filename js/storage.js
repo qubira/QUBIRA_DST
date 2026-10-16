@@ -81,6 +81,58 @@ export const Store = {
   getLocations: () => qdFetch('/api/security/locations'),
   getUserLocationHistory: (userId) => qdFetch(`/api/security/locations/history/${userId}`),
 
+  // Geocercas y Perímetro de Seguridad
+  getGeofence: async () => {
+    // Intentar leer de la API primero si está disponible
+    try {
+      const data = await qdFetch('/api/security/geofence');
+      if (data && data.ok && data.geofence) {
+        localStorage.setItem('qubira_dst_geofence', JSON.stringify(data.geofence));
+        return data.geofence;
+      }
+    } catch (_) {}
+    // Fallback instantáneo a almacenamiento local persistente
+    const local = localStorage.getItem('qubira_dst_geofence');
+    return local ? JSON.parse(local) : null;
+  },
+
+  saveGeofence: async (geofenceData) => {
+    localStorage.setItem('qubira_dst_geofence', JSON.stringify(geofenceData));
+    try {
+      await qdFetch('/api/security/geofence', {
+        method: 'POST',
+        body: JSON.stringify(geofenceData)
+      });
+    } catch (_) {}
+    return geofenceData;
+  },
+
+  deleteGeofence: async () => {
+    localStorage.removeItem('qubira_dst_geofence');
+    try {
+      await qdFetch('/api/security/geofence', { method: 'DELETE' });
+    } catch (_) {}
+    return true;
+  },
+
+  // Simulación para pruebas en vivo de alertas perimetrales
+  getSimulatedLocations: () => {
+    try {
+      return JSON.parse(localStorage.getItem('qubira_dst_simulated_locations') || '[]');
+    } catch (_) { return []; }
+  },
+
+  addSimulatedLocation: (simLoc) => {
+    const list = Store.getSimulatedLocations();
+    list.unshift(simLoc);
+    localStorage.setItem('qubira_dst_simulated_locations', JSON.stringify(list.slice(0, 50)));
+    return list;
+  },
+
+  clearSimulatedLocations: () => {
+    localStorage.removeItem('qubira_dst_simulated_locations');
+  },
+
   // Dashboard y amenazas
   getDashboard: () => qdFetch('/api/security/dashboard'),
   getThreats: () => qdFetch('/api/security/threats'),
