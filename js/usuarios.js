@@ -55,7 +55,7 @@ function renderTable() {
     <div class="table-wrap">
       <table>
         <thead>
-          <tr><th>Nombre</th><th>Usuario</th><th>Rol</th><th>Área</th><th>Módulos extra</th><th>Estado</th><th>Último acceso</th><th></th></tr>
+          <tr><th>Nombre</th><th>Usuario</th><th>Rol</th><th>Área</th><th>Módulos extra</th><th>Estado</th><th>2FA</th><th>Último acceso</th><th></th></tr>
         </thead>
         <tbody>
           ${_rows.map(rowHtml).join('')}
@@ -84,6 +84,7 @@ function rowHtml(u) {
     <td class="cell-sub">${escapeHtml(u.area || '—')}</td>
     <td class="cell-sub">${modules.length ? modules.map(escapeHtml).join(', ') : '—'}</td>
     <td>${estadoBadge(u)}</td>
+    <td>${u.totp_enabled ? '<span class="badge badge-green">Activo</span>' : '<span class="badge badge-red">Inactivo</span>'}</td>
     <td class="cell-sub">${u.ultimo_login ? formatDateTime(u.ultimo_login) : '—'}${u.ultima_ip ? ' · ' + escapeHtml(u.ultima_ip) : ''}</td>
     <td style="white-space:nowrap">
       <button class="btn btn-secondary btn-sm" data-permisos="${u.id}">${icon('key')} Permisos</button>

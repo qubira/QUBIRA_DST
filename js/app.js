@@ -10,6 +10,7 @@ import { renderGeolocalizacion } from './geolocalizacion.js';
 import { renderIp } from './ip.js';
 import { renderAuditoria } from './auditoria.js';
 import { renderAlertasPerimetrales } from './alertas-perimetrales.js';
+import { renderCuentasSin2fa } from './cuentas-sin-2fa.js';
 
 const VIEWS = {
   dashboard: { render: renderDashboard, title: 'Dashboard', subtitle: 'Resumen de seguridad del ecosistema Qubira' },
@@ -19,6 +20,7 @@ const VIEWS = {
   permisos: { render: renderPermisos, title: 'Permisos', subtitle: 'Módulos otorgados por usuario, más allá de su área' },
   sesiones: { render: renderSesiones, title: 'Sesiones', subtitle: 'Sesiones activas en todos los paneles de Qubira' },
   bloqueos2fa: { render: renderBloqueos2fa, title: 'Bloqueos 2FA', subtitle: 'Cuentas bloqueadas o suspendidas por códigos de verificación en dos pasos incorrectos' },
+  'cuentas-sin-2fa': { render: renderCuentasSin2fa, title: 'Cuentas sin 2FA', subtitle: 'Reporte y control de seguridad: cuentas corporativas con verificación en dos pasos inactiva' },
   geolocalizacion: { render: renderGeolocalizacion, title: 'Geolocalización', subtitle: 'Monitoreo geoespacial en tiempo real y mapa de calor de inicios de sesión' },
   'alertas-perimetrales': { render: renderAlertasPerimetrales, title: 'Alertas Perimetrales', subtitle: 'Reporte forense de inicios de sesión fuera del rango perimetral corporativo (Sospechoso Alto)' },
   ip: { render: renderIp, title: 'IP', subtitle: 'Observación, bloqueo y autorización de direcciones IP' },
@@ -137,12 +139,28 @@ function isAuthorized(user) {
   document.getElementById('switch-module-btn')?.addEventListener('click', switchModule);
 
   initNav();
+  checkSin2faBadge();
   try {
     renderView('dashboard');
   } catch (err) {
     if (err?.message !== 'SESSION_EXPIRED') showBootError();
   }
 })();
+
+async function checkSin2faBadge() {
+  const badge = document.getElementById('nav-sin-2fa-counter');
+  if (!badge) return;
+  try {
+    const data = await Store.getTotpCompliance();
+    const count = data.stats?.inactive_count ?? data.rows?.filter(u => !u.totp_enabled).length ?? 0;
+    if (count > 0) {
+      badge.textContent = String(count);
+      badge.style.display = 'inline-flex';
+    } else {
+      badge.style.display = 'none';
+    }
+  } catch (_) { /* sin red o endpoint previo */ }
+}
 
 // ─── Cierre de sesión por inactividad + detección de sesión reemplazada ──────
 /* Basado en Date.now() y un solo "tick" cada 1s (no en cadenas de
@@ -204,7 +222,10 @@ function isAuthorized(user) {
      para que ese chequeo ocurra. */
   async function heartbeat() {
     if (!localStorage.getItem('dst_token')) return;
-    try { await Store.ping(); } catch (_) { /* ya lo maneja storage.js */ }
+    try {
+      await Store.ping();
+      checkSin2faBadge();
+    } catch (_) { /* ya lo maneja storage.js */ }
   }
 
   function tick() {
