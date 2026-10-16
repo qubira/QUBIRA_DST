@@ -29,6 +29,14 @@ let _drawingPolygonPreview = null;
 let _outOfBoundsLocations = [];
 let _showPerimeter = true;
 
+// Modo Edición interactiva de vértices existentes
+let _isEditingMode = false;
+let _editingPoints = [];
+let _editingMarkers = [];
+let _editingMidpointMarkers = [];
+let _editingPolygon = null;
+let _editingHistory = [];
+
 // Centro de Perú para el mapa
 const PERU_CENTER = [-9.189967, -75.015152];
 const PERU_ZOOM = 6;
@@ -150,9 +158,12 @@ export function renderGeolocalizacion() {
             </div>
 
             <!-- Herramientas de Perímetro de Seguridad -->
-            <div class="geo-pill-group" title="Gestión de Perímetro de Logeo">
-              <button class="geo-pill-btn" id="btn-tool-draw-perimeter" title="Trazar nuevo perímetro en el mapa">
-                ✏️ Dibujar Perímetro
+            <div class="geo-pill-group" title="Gestión y Edición de Perímetro de Logeo">
+              <button class="geo-pill-btn" id="btn-tool-draw-perimeter" title="Trazar nuevo perímetro desde cero">
+                📐 Nuevo
+              </button>
+              <button class="geo-pill-btn" id="btn-tool-edit-perimeter" title="Mover y ajustar vértices del perímetro actual" style="display:none;color:#4f46e5;font-weight:700;">
+                ✏️ Editar Perímetro
               </button>
               <button class="geo-pill-btn" id="btn-tool-toggle-perimeter" title="Mostrar/ocultar zona segura">
                 🛡️ Ver Zona
@@ -196,6 +207,19 @@ export function renderGeolocalizacion() {
             <button class="btn btn-sm btn-secondary" id="btn-draw-undo">↶ Deshacer Punto</button>
             <button class="btn btn-sm btn-primary" id="btn-draw-save">💾 Guardar Perímetro</button>
             <button class="btn btn-sm btn-secondary" id="btn-draw-cancel">✕ Cancelar</button>
+          </div>
+        </div>
+
+        <!-- Barra Flotante de Modo Edición de Geocerca Existente -->
+        <div class="geo-drawing-floating-bar edit-mode" id="geo-editing-bar" style="display:none;">
+          <div class="geo-drawing-info">
+            <strong style="color:#38bdf8;">✏️ Modo Edición de Perímetro Activo</strong>
+            <span>Arrastra los círculos verdes para mover los vértices. Haz clic en <strong>(+)</strong> para añadir puntos intermedios, o clic derecho en un vértice para eliminarlo. (<strong id="edit-point-count">0</strong> vértices)</span>
+          </div>
+          <div class="geo-drawing-actions">
+            <button class="btn btn-sm btn-secondary" id="btn-edit-undo" title="Deshacer último cambio">↶ Deshacer</button>
+            <button class="btn btn-sm btn-primary" id="btn-edit-save" title="Guardar modificaciones">💾 Guardar Cambios</button>
+            <button class="btn btn-sm btn-secondary" id="btn-edit-cancel" title="Descartar cambios">✕ Cancelar</button>
           </div>
         </div>
 
@@ -248,8 +272,9 @@ function setupEventListeners() {
   document.getElementById('btn-mode-hybrid')?.addEventListener('click', () => setMode('hybrid'));
   document.getElementById('btn-mode-heat')?.addEventListener('click', () => setMode('heat'));
 
-  // Herramientas de dibujo y gestión de perímetro
+  // Herramientas de dibujo, edición y gestión de perímetro
   document.getElementById('btn-tool-draw-perimeter')?.addEventListener('click', startDrawingPerimeter);
+  document.getElementById('btn-tool-edit-perimeter')?.addEventListener('click', startEditingPerimeter);
   document.getElementById('btn-tool-toggle-perimeter')?.addEventListener('click', togglePerimeter);
   document.getElementById('btn-tool-clear-perimeter')?.addEventListener('click', promptClearPerimeter);
 
@@ -257,6 +282,11 @@ function setupEventListeners() {
   document.getElementById('btn-draw-undo')?.addEventListener('click', undoDrawingPoint);
   document.getElementById('btn-draw-save')?.addEventListener('click', saveDrawingPerimeter);
   document.getElementById('btn-draw-cancel')?.addEventListener('click', cancelDrawingPerimeter);
+
+  // Acciones en la barra flotante de edición
+  document.getElementById('btn-edit-undo')?.addEventListener('click', undoEditingPerimeter);
+  document.getElementById('btn-edit-save')?.addEventListener('click', saveEditedPerimeter);
+  document.getElementById('btn-edit-cancel')?.addEventListener('click', cancelEditingPerimeter);
 
   document.getElementById('btn-jump-alerts-rep')?.addEventListener('click', () => {
     if (window.navigateToView) window.navigateToView('alertas-perimetrales');
@@ -291,6 +321,7 @@ function setupEventListeners() {
   window.flyToLocation = flyToLocation;
   window.refreshGeoData = loadData;
   window.startDrawingPerimeterOnMap = startDrawingPerimeter;
+  window.startEditingPerimeterOnMap = startEditingPerimeter;
 }
 
 function switchBasemap(type) {
@@ -364,13 +395,13 @@ function initMap() {
 
   switchBasemap(_currentBasemap);
 
-  // Escuchar clics en el mapa para dibujo interactivo
+  // Escuchar clics en el mapa para dibujo o edición interactiva
   _map.on('click', handleMapClick);
 
   setTimeout(() => { if (_map) _map.invalidateSize(); }, 200);
   setTimeout(() => { if (_map) _map.invalidateSize(); }, 600);
 
-  // Verificar si hay salto programado desde el reporte forense o solicitud de dibujo
+  // Verificar si hay salto programado o solicitud de dibujo/edición
   checkPendingActions();
 }
 
@@ -391,6 +422,15 @@ function checkPendingActions() {
     sessionStorage.removeItem('qubira_dst_activate_drawing');
     setTimeout(() => {
       startDrawingPerimeter();
+    }, 500);
+    return;
+  }
+
+  const shouldEdit = sessionStorage.getItem('qubira_dst_activate_editing');
+  if (shouldEdit) {
+    sessionStorage.removeItem('qubira_dst_activate_editing');
+    setTimeout(() => {
+      startEditingPerimeter();
     }, 500);
   }
 }
@@ -428,7 +468,7 @@ async function loadData() {
     updateMapLayers();
 
     // Centrar suavemente en los puntos o en el perímetro si existe
-    if (_locationsData.length > 0 && _map && !_selectedUserId) {
+    if (_locationsData.length > 0 && _map && !_selectedUserId && !_isEditingMode && !_isDrawingMode) {
       setTimeout(() => {
         _map.invalidateSize();
         const validCoords = _locationsData
@@ -497,6 +537,7 @@ function updatePerimeterAlertUI() {
   const alertCountPill = document.getElementById('btn-alert-count-pill');
   const filterBadgeOut = document.getElementById('filter-badge-out');
   const clearBtn = document.getElementById('btn-tool-clear-perimeter');
+  const editBtn = document.getElementById('btn-tool-edit-perimeter');
   const toggleBtn = document.getElementById('btn-tool-toggle-perimeter');
 
   if (alertBanner) {
@@ -515,6 +556,7 @@ function updatePerimeterAlertUI() {
 
   const hasPerimeter = _geofence && _geofence.points && _geofence.points.length >= 3;
   if (clearBtn) clearBtn.style.display = hasPerimeter ? 'inline-flex' : 'none';
+  if (editBtn) editBtn.style.display = hasPerimeter ? 'inline-flex' : 'none';
   if (toggleBtn) {
     toggleBtn.textContent = _showPerimeter ? '🛡️ Ocultar Zona' : '🛡️ Mostrar Zona';
   }
@@ -531,7 +573,7 @@ function renderPerimeterOnMap() {
     _geofenceLayer = null;
   }
 
-  if (!_showPerimeter || !_geofence || !_geofence.points || _geofence.points.length < 3) {
+  if (!_showPerimeter || !_geofence || !_geofence.points || _geofence.points.length < 3 || _isEditingMode || _isDrawingMode) {
     return;
   }
 
@@ -551,7 +593,7 @@ function renderPerimeterOnMap() {
     _geofenceLayer.bindTooltip(`
       <div style="font-size:12px;font-weight:700;color:#065f46;">
         🛡️ ${escapeHtml(_geofence.name || 'Perímetro Corporativo Autorizado')}<br>
-        <span style="font-size:10.5px;font-weight:normal;color:#047857;">Área autorizada: ~${areaKm2} km² · ${_geofence.points.length} vértices</span>
+        <span style="font-size:10.5px;font-weight:normal;color:#047857;">Área autorizada: ~${areaKm2} km² · ${_geofence.points.length} vértices (Clic en "Editar" para modificar)</span>
       </div>
     `, { permanent: false, sticky: true });
 
@@ -568,10 +610,14 @@ function togglePerimeter() {
 }
 
 /**
- * MODO DIBUJO INTERACTIVO DE PERÍMETRO
+ * ============================================================
+ * MODO DIBUJO INTERACTIVO DE PERÍMETRO DESDE CERO
+ * ============================================================
  */
 function startDrawingPerimeter() {
   if (!_map) return;
+  if (_isEditingMode) exitEditingMode();
+
   _isDrawingMode = true;
   _drawingPoints = [];
 
@@ -584,24 +630,39 @@ function startDrawingPerimeter() {
 
   const bar = document.getElementById('geo-drawing-bar');
   if (bar) bar.style.display = 'flex';
+
+  const editBar = document.getElementById('geo-editing-bar');
+  if (editBar) editBar.style.display = 'none';
+
   const countEl = document.getElementById('draw-point-count');
   if (countEl) countEl.textContent = '0';
 
-  // Cambiar cursor a cruz para precisión
   const mapEl = document.getElementById('geo-map');
   if (mapEl) mapEl.style.cursor = 'crosshair';
 
-  toast('🟢 Modo Dibujo Activo: Haz clic en el mapa para marcar los vértices del perímetro.', 'info');
+  toast('🟢 Modo Dibujo Activo: Haz clic en el mapa para marcar los vértices del nuevo perímetro.', 'info');
 }
 
 function handleMapClick(e) {
-  if (!_isDrawingMode || !_map) return;
+  if (!_map) return;
 
-  const lat = e.latlng.lat;
-  const lng = e.latlng.lng;
-  _drawingPoints.push([lat, lng]);
+  if (_isDrawingMode) {
+    const lat = e.latlng.lat;
+    const lng = e.latlng.lng;
+    _drawingPoints.push([lat, lng]);
+    updateDrawingVisuals();
+    return;
+  }
 
-  updateDrawingVisuals();
+  if (_isEditingMode) {
+    const lat = e.latlng.lat;
+    const lng = e.latlng.lng;
+    _editingPoints.push([lat, lng]);
+    pushEditingHistory();
+    renderEditingVisuals();
+    toast(`Vértice #${_editingPoints.length} agregado al perímetro`, 'info');
+    return;
+  }
 }
 
 function updateDrawingVisuals() {
@@ -612,7 +673,6 @@ function updateDrawingVisuals() {
 
   clearDrawingLayers();
 
-  // Colocar marcadores en cada vértice dibujado
   _drawingPoints.forEach((pt, index) => {
     const marker = L.circleMarker(pt, {
       radius: 6,
@@ -627,7 +687,6 @@ function updateDrawingVisuals() {
     _drawingMarkers.push(marker);
   });
 
-  // Línea poligonal que conecta los vértices
   if (_drawingPoints.length >= 2) {
     _drawingLine = L.polyline(_drawingPoints, {
       color: '#059669',
@@ -637,7 +696,6 @@ function updateDrawingVisuals() {
     }).addTo(_map);
   }
 
-  // Si tiene 3 o más puntos, mostrar previsualización de polígono cerrado
   if (_drawingPoints.length >= 3) {
     _drawingPolygonPreview = L.polygon(_drawingPoints, {
       color: '#10b981',
@@ -706,6 +764,245 @@ function clearDrawingLayers() {
     _drawingMarkers = [];
     if (_drawingLine) { try { _map.removeLayer(_drawingLine); } catch (_) {} _drawingLine = null; }
     if (_drawingPolygonPreview) { try { _map.removeLayer(_drawingPolygonPreview); } catch (_) {} _drawingPolygonPreview = null; }
+  }
+}
+
+/**
+ * ============================================================
+ * MODO EDICIÓN INTERACTIVA DE VÉRTICES (ARRASTRAR / MODIFICAR)
+ * ============================================================
+ */
+function startEditingPerimeter() {
+  if (!_map) return;
+  if (!_geofence || !_geofence.points || _geofence.points.length < 3) {
+    toast('No hay un perímetro activo para editar. Dibuja uno nuevo.', 'warning');
+    startDrawingPerimeter();
+    return;
+  }
+
+  if (_isDrawingMode) exitDrawingMode();
+
+  _isEditingMode = true;
+  _editingPoints = _geofence.points.map(pt => [parseFloat(pt[0]), parseFloat(pt[1])]);
+  _editingHistory = [JSON.stringify(_editingPoints)];
+
+  if (_geofenceLayer) {
+    try { _map.removeLayer(_geofenceLayer); } catch (_) {}
+    _geofenceLayer = null;
+  }
+
+  const editBar = document.getElementById('geo-editing-bar');
+  if (editBar) editBar.style.display = 'flex';
+
+  const drawBar = document.getElementById('geo-drawing-bar');
+  if (drawBar) drawBar.style.display = 'none';
+
+  renderEditingVisuals();
+
+  if (_editingPoints.length > 0) {
+    const bounds = L.latLngBounds(_editingPoints);
+    _map.fitBounds(bounds, { maxZoom: 16, padding: [60, 60] });
+  }
+
+  toast('✏️ Modo Edición Activo: Arrastra los círculos numerados para ajustar los vértices o clic en (+) para añadir puntos.', 'info');
+}
+
+function renderEditingVisuals() {
+  if (!_map) return;
+
+  const countEl = document.getElementById('edit-point-count');
+  if (countEl) countEl.textContent = _editingPoints.length;
+
+  clearEditingLayers();
+
+  // 1. Polígono activo que se ajusta en tiempo real
+  _editingPolygon = L.polygon(_editingPoints, {
+    color: '#0284c7',
+    weight: 3,
+    dashArray: '5, 5',
+    fillColor: '#38bdf8',
+    fillOpacity: 0.22
+  }).addTo(_map);
+
+  // 2. Colocar marcadores arrastrables para cada vértice
+  _editingPoints.forEach((pt, index) => {
+    const customIcon = L.divIcon({
+      className: 'geo-edit-vertex-wrapper',
+      html: `
+        <div class="geo-edit-vertex-pin" title="Vértice #${index + 1} (Arrastra para mover / clic para opciones)">
+          ${index + 1}
+        </div>
+      `,
+      iconSize: [26, 26],
+      iconAnchor: [13, 13]
+    });
+
+    const marker = L.marker(pt, {
+      draggable: true,
+      icon: customIcon
+    }).addTo(_map);
+
+    // Evento de arrastre continuo
+    marker.on('drag', (e) => {
+      const pos = e.target.getLatLng();
+      _editingPoints[index] = [pos.lat, pos.lng];
+      if (_editingPolygon) {
+        _editingPolygon.setLatLngs(_editingPoints);
+      }
+      updateMidpointPositions();
+    });
+
+    // Guardar en historial al soltar el vértice
+    marker.on('dragend', () => {
+      pushEditingHistory();
+      renderEditingVisuals();
+    });
+
+    // Clic derecho para borrar vértice
+    marker.on('contextmenu', (e) => {
+      L.DomEvent.stopPropagation(e);
+      promptDeleteVertex(index);
+    });
+
+    // Clic simple: opción directa de eliminar
+    marker.on('click', (e) => {
+      L.DomEvent.stopPropagation(e);
+      if (_editingPoints.length > 3) {
+        promptDeleteVertex(index);
+      } else {
+        toast(`Vértice #${index + 1}. No se puede eliminar (mínimo 3 requeridos).`, 'info');
+      }
+    });
+
+    _editingMarkers.push(marker);
+  });
+
+  // 3. Colocar puntos intermedios (+) entre cada par de vértices para inserción fácil
+  for (let i = 0; i < _editingPoints.length; i++) {
+    const nextIdx = (i + 1) % _editingPoints.length;
+    const pt1 = _editingPoints[i];
+    const pt2 = _editingPoints[nextIdx];
+    const midLat = (pt1[0] + pt2[0]) / 2;
+    const midLng = (pt1[1] + pt2[1]) / 2;
+
+    const midIcon = L.divIcon({
+      className: 'geo-midpoint-wrapper',
+      html: `<div class="geo-midpoint-pin" title="Haz clic para insertar un nuevo vértice aquí">+</div>`,
+      iconSize: [20, 20],
+      iconAnchor: [10, 10]
+    });
+
+    const midMarker = L.marker([midLat, midLng], { icon: midIcon }).addTo(_map);
+    midMarker.on('click', (e) => {
+      L.DomEvent.stopPropagation(e);
+      insertVertexAt(i + 1, [midLat, midLng]);
+    });
+
+    _editingMidpointMarkers.push(midMarker);
+  }
+}
+
+function updateMidpointPositions() {
+  if (_editingMidpointMarkers.length !== _editingPoints.length) return;
+  for (let i = 0; i < _editingPoints.length; i++) {
+    const nextIdx = (i + 1) % _editingPoints.length;
+    const pt1 = _editingPoints[i];
+    const pt2 = _editingPoints[nextIdx];
+    const midLat = (pt1[0] + pt2[0]) / 2;
+    const midLng = (pt1[1] + pt2[1]) / 2;
+    _editingMidpointMarkers[i]?.setLatLng([midLat, midLng]);
+  }
+}
+
+function insertVertexAt(index, latlng) {
+  _editingPoints.splice(index, 0, latlng);
+  pushEditingHistory();
+  renderEditingVisuals();
+  toast(`Nuevo vértice #${index + 1} insertado en el perímetro`, 'info');
+}
+
+function promptDeleteVertex(index) {
+  if (_editingPoints.length <= 3) {
+    toast('No se puede eliminar: el perímetro requiere como mínimo 3 vértices para ser un área cerrada.', 'warning');
+    return;
+  }
+  _editingPoints.splice(index, 1);
+  pushEditingHistory();
+  renderEditingVisuals();
+  toast(`Vértice #${index + 1} eliminado`, 'info');
+}
+
+function pushEditingHistory() {
+  const currentStr = JSON.stringify(_editingPoints);
+  if (_editingHistory[_editingHistory.length - 1] !== currentStr) {
+    _editingHistory.push(currentStr);
+    if (_editingHistory.length > 25) _editingHistory.shift();
+  }
+}
+
+function undoEditingPerimeter() {
+  if (_editingHistory.length <= 1) {
+    toast('No hay más cambios previos para deshacer.', 'info');
+    return;
+  }
+  _editingHistory.pop();
+  _editingPoints = JSON.parse(_editingHistory[_editingHistory.length - 1]);
+  renderEditingVisuals();
+  toast('Cambio deshecho', 'info');
+}
+
+async function saveEditedPerimeter() {
+  if (_editingPoints.length < 3) {
+    toast('El perímetro requiere al menos 3 vértices para delimitar una zona.', 'warning');
+    return;
+  }
+
+  const updatedGeofence = {
+    name: _geofence?.name || 'Perímetro Corporativo Autorizado',
+    points: _editingPoints,
+    updated_at: new Date().toISOString(),
+    active: true
+  };
+
+  try {
+    await Store.saveGeofence(updatedGeofence);
+    _geofence = updatedGeofence;
+    _showPerimeter = true;
+    exitEditingMode();
+
+    toast(`✅ ¡Perímetro actualizado exitosamente con ${_editingPoints.length} vértices!`, 'success');
+    loadData();
+  } catch (err) {
+    toast('Error al guardar el perímetro modificado', 'error');
+  }
+}
+
+function cancelEditingPerimeter() {
+  exitEditingMode();
+  renderPerimeterOnMap();
+  toast('Edición de perímetro cancelada (cambios descartados)', 'info');
+}
+
+function exitEditingMode() {
+  _isEditingMode = false;
+  _editingPoints = [];
+  _editingHistory = [];
+  clearEditingLayers();
+
+  const bar = document.getElementById('geo-editing-bar');
+  if (bar) bar.style.display = 'none';
+}
+
+function clearEditingLayers() {
+  if (_map) {
+    _editingMarkers.forEach(m => { try { _map.removeLayer(m); } catch (_) {} });
+    _editingMarkers = [];
+    _editingMidpointMarkers.forEach(m => { try { _map.removeLayer(m); } catch (_) {} });
+    _editingMidpointMarkers = [];
+    if (_editingPolygon) {
+      try { _map.removeLayer(_editingPolygon); } catch (_) {}
+      _editingPolygon = null;
+    }
   }
 }
 
@@ -838,7 +1135,7 @@ function updateMapLayers() {
       // Marcador de Leaflet con estilo dinámico
       let pinClass = '';
       if (isOut) {
-        pinClass = 'out-of-bounds'; // Pulsación roja intensa con icono de alerta
+        pinClass = 'out-of-bounds';
       } else if (isSuspended) {
         pinClass = 'suspended';
       } else if (isActiveSession) {
@@ -859,7 +1156,6 @@ function updateMapLayers() {
 
       const initials = ((loc.nombre?.[0] || loc.username?.[0] || '?') + (loc.apellidos?.[0] || '')).toUpperCase();
 
-      // Calidad de precisión GPS
       let accBadgeHtml = '';
       if (accuracy > 0) {
         if (accuracy <= 30) {

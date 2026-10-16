@@ -113,8 +113,13 @@ function renderViewContent() {
       </div>
 
       <div class="geo-alert-actions-bar">
-        <button class="btn btn-secondary btn-sm" id="btn-goto-draw-map" title="Abrir el mapa interactivo para modificar el perímetro">
-          📐 Dibujar Perímetro en Mapa
+        ${perimeterVertices >= 3 ? `
+          <button class="btn btn-primary btn-sm" id="btn-goto-edit-map" title="Editar y mover los vértices del perímetro actual en el mapa">
+            ✏️ Editar Perímetro
+          </button>
+        ` : ''}
+        <button class="btn btn-secondary btn-sm" id="btn-goto-draw-map" title="Abrir el mapa interactivo para delimitar perímetro nuevo">
+          📐 ${perimeterVertices >= 3 ? 'Nuevo Perímetro' : 'Dibujar Perímetro'}
         </button>
         <button class="btn btn-secondary btn-sm" id="btn-export-csv" title="Descargar auditoría en formato CSV">
           📥 Exportar CSV
@@ -197,8 +202,13 @@ function renderViewContent() {
             🧹 Limpiar Registros de Prueba (${Store.getSimulatedLocations().length})
           </button>
         ` : ''}
-        <button class="btn btn-primary btn-sm" id="btn-manage-perimeter">
-          ${perimeterVertices >= 3 ? '✏️ Redibujar / Ver en Mapa' : '📐 Trazar Perímetro en Mapa'}
+        ${perimeterVertices >= 3 ? `
+          <button class="btn btn-primary btn-sm" id="btn-edit-perimeter-banner" title="Mover y ajustar vértices del perímetro en el mapa">
+            ✏️ Editar Vértices
+          </button>
+        ` : ''}
+        <button class="btn btn-secondary btn-sm" id="btn-manage-perimeter">
+          ${perimeterVertices >= 3 ? '📐 Redibujar Nuevo' : '📐 Trazar Perímetro en Mapa'}
         </button>
       </div>
     </div>
@@ -452,6 +462,14 @@ function setupEvents() {
     window.navigateToGeofenceDrawing();
   });
 
+  document.getElementById('btn-goto-edit-map')?.addEventListener('click', () => {
+    window.navigateToGeofenceEditing();
+  });
+
+  document.getElementById('btn-edit-perimeter-banner')?.addEventListener('click', () => {
+    window.navigateToGeofenceEditing();
+  });
+
   document.getElementById('btn-manage-perimeter')?.addEventListener('click', () => {
     window.navigateToGeofenceDrawing();
   });
@@ -485,6 +503,13 @@ function setupEvents() {
 
   window.navigateToGeofenceDrawing = () => {
     sessionStorage.setItem('qubira_dst_activate_drawing', 'true');
+    if (window.navigateToView) {
+      window.navigateToView('geolocalizacion');
+    }
+  };
+
+  window.navigateToGeofenceEditing = () => {
+    sessionStorage.setItem('qubira_dst_activate_editing', 'true');
     if (window.navigateToView) {
       window.navigateToView('geolocalizacion');
     }
