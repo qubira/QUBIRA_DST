@@ -93,7 +93,7 @@ function renderViewContent() {
 
   const allAlerts = getOutOfPerimeterAlerts();
   const activeAlertsCount = allAlerts.filter(a => a.isActiveSession).length;
-  const uniqueUsersCount = new Set(allAlerts.map(a => a.usuario_id)).length;
+  const uniqueUsersCount = new Set(allAlerts.map(a => a.usuario_id)).size;
   const perimeterVertices = _geofence?.points?.length || 0;
   const perimeterArea = _geofence?.points ? calculatePolygonAreaKm2(_geofence.points).toFixed(1) : '0';
 
