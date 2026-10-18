@@ -172,8 +172,8 @@ async function checkSin2faBadge() {
    servidor invalida esta sesión y lo detecta acá aunque no haya pasado
    ninguna inactividad, mostrando un aviso en vez de un cierre mudo. */
 (function setupSessionGuard(onLogout) {
-  const WARN_AFTER_MS = 90 * 1000;
-  const LOGOUT_AFTER_MS = 120 * 1000;
+  const WARN_AFTER_MS = 10 * 60 * 1000;
+  const LOGOUT_AFTER_MS = WARN_AFTER_MS + (30 * 1000);
   const HEARTBEAT_MS = 20 * 1000;
 
   let lastActivity = Date.now();
