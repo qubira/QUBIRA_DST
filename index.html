@@ -53,10 +53,11 @@
   <aside class="sidebar" id="sidebar">
     <div class="sidebar__brand">
       <div class="logo-mark"><img src="https://raw.githubusercontent.com/qubira/IMAGENES/main/logo2.png" alt="Qubira"></div>
-      <div>
+      <div class="sidebar__brand-text">
         Qubira DST
         <small>Digital Security & Traffic</small>
       </div>
+      <button type="button" class="sidebar__toggle" id="sidebar-toggle" title="Contraer menú" aria-label="Contraer menú"><svg class="icon"><use href="#icon-chevron-left"></use></svg></button>
     </div>
 
     <nav>
@@ -87,18 +88,18 @@
     <div class="sidebar__footer">
       <div class="sidebar__footer-user">
         <div class="avatar" id="session-avatar">AD</div>
-        <div>
+        <div class="sidebar__footer-text">
           <div class="user-name" id="session-name">Administrador</div>
           <div class="user-role" id="session-role">DST · Qubira</div>
         </div>
       </div>
       <button id="switch-module-btn" class="sidebar__logout-btn sidebar__switch-btn" title="Cambiar de módulo">
         <svg class="icon" style="width:15px;height:15px"><use href="#icon-grid"></use></svg>
-        Módulos
+        <span class="sb-txt">Módulos</span>
       </button>
       <button id="logout-btn" class="sidebar__logout-btn" title="Cerrar sesión">
         <svg class="icon" style="width:15px;height:15px"><use href="#icon-log-out"></use></svg>
-        Cerrar sesión
+        <span class="sb-txt">Cerrar sesión</span>
       </button>
     </div>
   </aside>

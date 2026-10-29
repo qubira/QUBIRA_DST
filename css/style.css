@@ -917,6 +917,29 @@ tbody tr:hover { background: #fafafa; }
   to { opacity: 1; transform: translateX(0); }
 }
 
+/* ---------- Menú lateral contraído (solo íconos) ---------- */
+.sidebar, .main { transition: width .25s ease, margin-left .25s ease, transform .25s ease; }
+.sidebar__brand { position: relative; }
+.sidebar__brand-text { flex: 1; min-width: 0; white-space: nowrap; }
+.sidebar__toggle { flex: none; width: 28px; height: 28px; border-radius: 8px; border: 1px solid rgba(255,255,255,.1); background: rgba(255,255,255,.05); color: var(--sidebar-text); display: flex; align-items: center; justify-content: center; cursor: pointer; padding: 0; }
+.sidebar__toggle:hover { background: var(--sidebar-bg-hover); color: #fff; }
+.sidebar__toggle .icon { width: 16px; height: 16px; transition: transform .25s ease; }
+.nav-item { position: relative; }
+body.sidebar-colapsada { --sidebar-w: 72px; }
+body.sidebar-colapsada .sidebar__brand { flex-direction: column; padding: 16px 0 12px; gap: 10px; }
+body.sidebar-colapsada .sidebar__brand-text,
+body.sidebar-colapsada .sidebar__footer-text,
+body.sidebar-colapsada .sb-txt { display: none; }
+body.sidebar-colapsada .sidebar__toggle .icon { transform: rotate(180deg); }
+body.sidebar-colapsada .sidebar nav { padding: 6px 10px; }
+body.sidebar-colapsada .nav-section-label { font-size: 0; padding: 0; margin: 8px 6px; border-top: 1px solid #1f2937; }
+body.sidebar-colapsada .nav-item { font-size: 0; justify-content: center; padding: 10px 0; gap: 0; }
+body.sidebar-colapsada .nav-item .icon { width: 20px; height: 20px; }
+body.sidebar-colapsada .nav-item .badge { position: absolute; top: 2px; right: 4px; font-size: 9px !important; padding: 1px 5px !important; margin: 0 !important; }
+body.sidebar-colapsada .sidebar__footer { padding: 12px 10px; align-items: center; }
+body.sidebar-colapsada .sidebar__footer-user { justify-content: center; }
+body.sidebar-colapsada .sidebar__logout-btn { width: 44px; height: 38px; padding: 0; }
+
 /* ---------- Sidebar overlay (mobile) ---------- */
 .sidebar-overlay {
   display: none;
@@ -935,6 +958,8 @@ tbody tr:hover { background: #fafafa; }
 
 @media (max-width: 880px) {
   .sidebar { transform: translateX(-100%); }
+  .sidebar__toggle { display: none; }
+  body.sidebar-colapsada { --sidebar-w: 264px; }
   .sidebar.open { transform: translateX(0); }
   .main { margin-left: 0; }
   .menu-toggle { display: flex; }

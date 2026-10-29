@@ -56,7 +56,28 @@ function closeSidebarOnMobile() {
   document.getElementById('sidebar-overlay').classList.remove('active');
 }
 
+// Menú lateral contraído (solo íconos), como en ADG; se recuerda la preferencia
+function aplicarMenuContraido(contraido) {
+  document.body.classList.toggle('sidebar-colapsada', contraido);
+  const btn = document.getElementById('sidebar-toggle');
+  if (btn) { btn.title = contraido ? 'Expandir menú' : 'Contraer menú'; btn.setAttribute('aria-label', btn.title); }
+  // Con el menú contraído, el nombre de cada opción aparece al pasar el mouse
+  document.querySelectorAll('.sidebar .nav-item, .sidebar__logout-btn').forEach(el => {
+    const texto = el.textContent.replace(/\s+/g, ' ').replace(/\s\d+\s*$/, '').trim();
+    if (contraido) el.setAttribute('title', texto);
+    else if (el.classList.contains('nav-item')) el.removeAttribute('title');
+  });
+  try { localStorage.setItem('dst_sb', contraido ? '1' : '0'); } catch (_) {}
+}
+function initMenuContraido() {
+  let guardado = false;
+  try { guardado = localStorage.getItem('dst_sb') === '1'; } catch (_) {}
+  aplicarMenuContraido(guardado);
+  document.getElementById('sidebar-toggle')?.addEventListener('click', () => aplicarMenuContraido(!document.body.classList.contains('sidebar-colapsada')));
+}
+
 function initNav() {
+  initMenuContraido();
   document.querySelectorAll('.nav-item').forEach(item => {
     item.addEventListener('click', () => renderView(item.dataset.view));
   });

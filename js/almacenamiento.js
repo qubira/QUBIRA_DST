@@ -340,16 +340,16 @@ function pintarCarpetas() {
 }
 
 function filaArchivo(x) {
-  const nombre = String(x.public_id).split('/').pop();
+  const nombre = String(x.public_id).split('/').pop().replace(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}_/i, '').replace(/^doc_\d{10,}_/, '').replace(/_+/g, ' ').trim();
   const carpeta = String(x.public_id).split('/').slice(0, -1).join('/') || '(raíz)';
-  return `<tr class="alm-clic" data-archivo="${escapeHtml(x.public_id)}" title="Ver detalle y dónde se usa"><td><b>${escapeHtml(nombre)}</b><div class="alm-sub">${escapeHtml(carpeta)}</div></td>
-    <td><span class="badge badge-gray">${escapeHtml(x.tipo === 'image' ? 'imagen' : x.tipo === 'raw' ? 'documento' : x.tipo)}${x.formato ? ' · ' + escapeHtml(x.formato) : ''}</span></td>
+  return `<tr class="alm-clic" data-archivo="${escapeHtml(x.public_id)}" title="Ver detalle y dónde se usa"><td title="${escapeHtml(x.public_id)}"><b>${escapeHtml(nombre)}</b><div class="alm-sub">${escapeHtml(carpeta)}</div></td>
+    <td><span class="badge badge-gray" title="${escapeHtml(x.tipo === 'image' ? 'Imagen' : x.tipo === 'raw' ? 'Documento' : 'Video / audio')}">${escapeHtml((x.formato || x.tipo).toUpperCase())}</span></td>
     <td><b>${tam(x.bytes)}</b></td><td class="alm-sub">${formatDateTime(x.creado)}</td>
-    <td>${x.url ? `<a href="${escapeHtml(x.url)}" target="_blank" rel="noopener noreferrer" class="btn btn-secondary btn-sm">${icon('external-link')}</a>` : ''}</td></tr>`;
+    <td>${x.url ? `<a href="${escapeHtml(x.url)}" target="_blank" rel="noopener noreferrer" class="btn btn-secondary btn-sm alm-abrir" title="Abrir el archivo">${icon('external-link')}</a>` : ''}</td></tr>`;
 }
 function pintarArchivos() {
   const d = st.cloud?.detalle;
-  const tabla = filas => `<div class="table-wrap"><table><thead><tr><th>Archivo</th><th>Tipo</th><th>Tamaño</th><th>Subido</th><th></th></tr></thead><tbody>${filas}</tbody></table></div>`;
+  const tabla = filas => `<div class="table-wrap"><table class="alm-tabla-arch"><thead><tr><th>Archivo</th><th>Tipo</th><th>Tamaño</th><th>Subido</th><th></th></tr></thead><tbody>${filas}</tbody></table></div>`;
   const a = document.getElementById('alm-pesados'), b = document.getElementById('alm-recientes');
   if (a) a.innerHTML = d ? tabla(d.mas_pesados.map(filaArchivo).join('')) : '<div class="alm-vacio">Cargando…</div>';
   if (b) b.innerHTML = d ? tabla(d.recientes.map(filaArchivo).join('')) : '<div class="alm-vacio">Cargando…</div>';
@@ -415,7 +415,17 @@ function estilos() {
   @keyframes almPulso { 0%,100% { opacity: 1; } 50% { opacity: .3; } }
   .alm-intervalo { font-size: 12.5px; color: var(--text-muted); display: flex; gap: 6px; align-items: center; }
   .alm-intervalo select { border: 1px solid var(--border); border-radius: 8px; padding: 5px 8px; font-size: 12.5px; background: #fff; }
-  .alm-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+  .alm-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; margin-bottom: 16px; }
+  .alm-grid > .card, #view-almacenamiento .card { min-width: 0; }
+  #view-almacenamiento { max-width: 100%; overflow-x: hidden; }
+  .alm-tabla-arch { table-layout: fixed; width: 100%; }
+  .alm-tabla-arch th:nth-child(2) { width: 92px; } .alm-tabla-arch th:nth-child(3) { width: 84px; } .alm-tabla-arch th:nth-child(4) { width: 118px; } .alm-tabla-arch th:nth-child(5) { width: 58px; }
+  .alm-tabla-arch td:last-child, .alm-tabla-arch th:last-child { padding-left: 4px; padding-right: 12px; text-align: right; }
+  .alm-abrir { width: 32px; height: 30px; padding: 0 !important; display: inline-flex; align-items: center; justify-content: center; }
+  .alm-tabla-arch td:first-child b, .alm-tabla-arch td:first-child .alm-sub { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .alm-tabla-arch .badge { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
+  .alm-fila__nombre { min-width: 0; }
+  @media (max-width: 1280px) { .alm-tabla-arch th:nth-child(4), .alm-tabla-arch td:nth-child(4) { display: none; } }
   @media (max-width: 1100px) { .alm-grid { grid-template-columns: 1fr; } }
   .card__header h3 { display: flex; align-items: center; gap: 8px; }
   .alm-sub { font-size: 11.5px; color: var(--text-muted); font-weight: 500; }
@@ -434,7 +444,7 @@ function estilos() {
   @media (max-width: 700px) { .alm-stats { grid-template-columns: repeat(2, 1fr); } }
   .alm-titulo { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .4px; color: var(--text-muted); margin: 16px 0 8px; }
   .alm-fila { display: flex; align-items: center; gap: 10px; margin-bottom: 9px; font-size: 13px; }
-  .alm-fila__nombre { width: 200px; flex: none; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .alm-fila__nombre { width: 40%; max-width: 220px; flex: none; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .alm-fila__nombre small { display: block; font-weight: 500; font-size: 11px; color: var(--text-muted); }
   .alm-fila__barra { flex: 1; } .alm-fila__barra .alm-barra { height: 7px; }
   .alm-fila__val { width: 78px; text-align: right; font-weight: 700; flex: none; }
