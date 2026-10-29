@@ -11,6 +11,7 @@ import { renderIp } from './ip.js';
 import { renderAuditoria } from './auditoria.js';
 import { renderAlertasPerimetrales } from './alertas-perimetrales.js';
 import { renderCuentasSin2fa } from './cuentas-sin-2fa.js';
+import { renderAlmacenamiento } from './almacenamiento.js';
 
 const VIEWS = {
   dashboard: { render: renderDashboard, title: 'Dashboard', subtitle: 'Resumen de seguridad del ecosistema Qubira' },
@@ -24,6 +25,7 @@ const VIEWS = {
   geolocalizacion: { render: renderGeolocalizacion, title: 'Geolocalización', subtitle: 'Monitoreo geoespacial en tiempo real y mapa de calor de inicios de sesión' },
   'alertas-perimetrales': { render: renderAlertasPerimetrales, title: 'Alertas Perimetrales', subtitle: 'Reporte forense de inicios de sesión fuera del rango perimetral corporativo (Sospechoso Alto)' },
   ip: { render: renderIp, title: 'IP', subtitle: 'Observación, bloqueo y autorización de direcciones IP' },
+  almacenamiento: { render: renderAlmacenamiento, title: 'Almacenamiento', subtitle: 'Control en tiempo real de la base de datos (Neon) y los archivos (Cloudinary)' },
   auditoria: { render: renderAuditoria, title: 'Auditoría', subtitle: 'Registro de movimientos de todo el ecosistema Qubira' },
 };
 

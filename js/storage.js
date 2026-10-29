@@ -136,6 +136,10 @@ export const Store = {
 
   // Dashboard y amenazas
   getDashboard: () => qdFetch('/api/security/dashboard'),
+  // Control de almacenamiento (Neon + Cloudinary)
+  getStorageNeon: () => qdFetch('/api/security/storage/neon'),
+  getStorageCloudinary: (params) => qdFetch('/api/security/storage/cloudinary' + qs(params)),
+  getStorageHistory: (days) => qdFetch('/api/security/storage/history' + qs({ days })),
   getThreats: () => qdFetch('/api/security/threats'),
   getLoginsToday: () => qdFetch('/api/security/logins-today'),
 
