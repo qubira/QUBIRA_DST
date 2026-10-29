@@ -140,6 +140,8 @@ export const Store = {
   getStorageNeon: () => qdFetch('/api/security/storage/neon'),
   getStorageCloudinary: (params) => qdFetch('/api/security/storage/cloudinary' + qs(params)),
   getStorageHistory: (days) => qdFetch('/api/security/storage/history' + qs({ days })),
+  getStorageArchivos: (refrescar) => qdFetch('/api/security/storage/cloudinary/archivos' + qs({ refrescar: refrescar ? 1 : undefined })),
+  deleteCloudinary: (payload) => qdFetch('/api/security/storage/cloudinary/eliminar', { method: 'POST', body: JSON.stringify(payload) }),
   getThreats: () => qdFetch('/api/security/threats'),
   getLoginsToday: () => qdFetch('/api/security/logins-today'),
 

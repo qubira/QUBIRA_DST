@@ -3,6 +3,60 @@
 import { Store } from './storage.js';
 import { icon, escapeHtml, formatDateTime } from './utils.js';
 import { toast } from './ui.js';
+import { abrirExplorador, MODULOS, nombreModulo } from './almacenamiento-archivos.js';
+
+// Explicaciones de cada dato (ícono «i»)
+const INFO = {
+  neonUsado: 'Espacio que ocupa hoy la base de datos de QUBIRA en Neon (datos + índices), frente al límite de tu plan. Si llega al 100 %, Neon deja de aceptar escrituras.',
+  creditos: 'Cloudinary cobra en «créditos». El plan Free trae 25 por mes. Se gastan guardando archivos, sirviéndolos (ancho de banda) y generando versiones (transformaciones).',
+  archivosCloud: 'Peso total de las imágenes, documentos y videos guardados en Cloudinary, y cuántos archivos hay (los «originales» son los subidos; el resto son versiones derivadas como miniaturas).',
+  conexiones: 'Conexiones abiertas ahora mismo entre la API y la base. Pocas conexiones y baja latencia = la base responde bien.',
+  cache: 'Porcentaje de lecturas que Neon resolvió desde memoria sin ir al disco. Sobre 95 % es excelente; si baja mucho, las consultas se vuelven lentas.',
+  conActivas: 'Conexiones que están ejecutando una consulta en este instante, sobre el total de conexiones abiertas.',
+  latencia: 'Tiempo que tarda la base en responder una consulta simple desde la API. Incluye la distancia al servidor de Neon.',
+  transacciones: 'Operaciones confirmadas (guardar, editar, consultar) que la base registró desde su último reinicio.',
+  enVivo: 'Cómo cambia el tamaño de la base mientras tienes abierta esta pantalla (una lectura cada intervalo elegido).',
+  esquemas: 'La base se divide en «esquemas»: uno por módulo de QUBIRA. Aquí ves cuánto ocupa cada módulo y cuántas filas (registros) guarda.',
+  almacenamiento: 'Espacio que ocupan todos tus archivos guardados en Cloudinary. Cada 1 GB guardado consume 1 crédito al mes.',
+  anchoBanda: 'Datos que Cloudinary envió este mes a quienes vieron o descargaron archivos (logos, documentos, videos). Cada 1 GB enviado consume 1 crédito.',
+  transformaciones: 'Versiones que Cloudinary generó a partir de tus archivos (miniaturas, recortes, cambios de formato). Cada 1 000 consumen 1 crédito.',
+  image: 'Fotos, logos e íconos (PNG, JPG, WEBP, SVG) y PDF subidos como imagen. Haz clic para verlos.',
+  raw: 'Documentos que no son imagen (Word, Excel, ZIP, etc.). Haz clic para verlos.',
+  video: 'Videos y audios (MP4, MP3…). Son los que más pesan. Haz clic para verlos.',
+  objetos: 'Total de objetos en Cloudinary contando los originales y sus versiones derivadas (miniaturas, recortes). Haz clic para ver los archivos.',
+  solicitudes: 'Cantidad de veces que se pidió algún archivo a Cloudinary este mes (cada vez que una pantalla muestra un logo o documento).',
+  rateLimit: 'Consultas a la API de administración de Cloudinary que quedan en esta hora (este panel las usa para leer las cifras). Se reinicia cada hora.',
+  maxImagen: 'Tamaño máximo que permite tu plan para subir una sola imagen. Archivos más grandes serán rechazados.',
+  historial: 'Cada 15 minutos (mientras alguien abre este panel) se guarda una foto del tamaño de Neon y Cloudinary. El gráfico muestra el último valor de cada día para ver la tendencia.',
+  tablas: 'Las tablas que más ocupan en la base. «Datos» es la información; «Índices», las estructuras que aceleran las búsquedas.',
+  filas: 'Registros que contiene la tabla. «Eliminadas» son filas borradas o reemplazadas que aún ocupan espacio hasta la próxima limpieza automática.',
+  datos: 'Espacio que ocupa la información en sí.',
+  indices: 'Espacio de los índices: copias ordenadas que hacen rápidas las búsquedas. Ocupan espacio a cambio de velocidad.',
+  total: 'Datos + índices + almacenamiento auxiliar (TOAST) de la tabla.',
+  limpieza: 'Última vez que Neon limpió las filas eliminadas de la tabla (VACUUM). Neon lo hace automáticamente.',
+  carpetas: 'Cuánto ocupa cada carpeta de Cloudinary. Haz clic en una carpeta para ver y administrar sus archivos. Las carpetas que no empiezan con «qubira/» suelen ser de otras apps que comparten la cuenta.',
+  pesados: 'Los archivos que más espacio ocupan. Haz clic para ver qué son, dónde se usan y eliminarlos si ya no sirven.',
+  recientes: 'Los últimos archivos subidos a Cloudinary.',
+};
+const info = (clave, texto) => `<button type="button" class="alm-i" data-info="${escapeHtml(texto || INFO[clave] || '')}" aria-label="Qué es esto">i</button>`;
+const infoModulo = e => info(null, MODULOS[e] ? `${MODULOS[e][0]}: ${MODULOS[e][1]}` : `Esquema «${e}» de la base de datos.`);
+
+// Burbuja de ayuda de los íconos «i»
+document.addEventListener('click', e => {
+  const b = e.target.closest?.('.alm-i');
+  document.getElementById('alm-pop')?.remove();
+  if (!b) return;
+  e.stopPropagation(); e.preventDefault();
+  const pop = document.createElement('div');
+  pop.id = 'alm-pop'; pop.className = 'alm-pop'; pop.textContent = b.dataset.info;
+  document.body.appendChild(pop);
+  const r = b.getBoundingClientRect();
+  const w = pop.offsetWidth, h = pop.offsetHeight;
+  let left = Math.min(window.innerWidth - w - 10, Math.max(10, r.left + r.width / 2 - w / 2));
+  let top = r.bottom + 8;
+  if (top + h > window.innerHeight - 10) top = r.top - h - 8;
+  pop.style.left = left + 'px'; pop.style.top = top + 'px';
+}, true);
 
 const INTERVALOS = [[10, '10 s'], [15, '15 s'], [30, '30 s'], [60, '1 min'], [0, 'En pausa']];
 const st = {
@@ -44,18 +98,28 @@ export function renderAlmacenamiento() {
       <div class="card"><div class="card__header"><h3>${icon('database')} Neon · base de datos</h3><span class="alm-sub" id="alm-neon-sub"></span></div><div class="card__body" id="alm-neon"></div></div>
       <div class="card"><div class="card__header"><h3>${icon('cloud')} Cloudinary · archivos</h3><span class="alm-sub" id="alm-cloud-sub"></span></div><div class="card__body" id="alm-cloud"></div></div>
     </div>
-    <div class="card" style="margin-bottom:16px"><div class="card__header"><h3>${icon('bar-chart-2')} Crecimiento del almacenamiento</h3><span class="alm-sub">Una foto cada 15 min · último valor de cada día</span></div><div class="card__body" id="alm-hist"></div></div>
+    <div class="card" style="margin-bottom:16px"><div class="card__header"><h3>${icon('bar-chart-2')} Crecimiento del almacenamiento ${info('historial')}</h3><span class="alm-sub">Una foto cada 15 min · último valor de cada día</span></div><div class="card__body" id="alm-hist"></div></div>
     <div class="alm-grid">
-      <div class="card"><div class="card__header"><h3>Tablas más pesadas (Neon)</h3><span class="alm-sub">Top 25</span></div><div class="card__body alm-sin-pad" id="alm-tablas"></div></div>
-      <div class="card"><div class="card__header"><h3>Carpetas de Cloudinary</h3><button class="btn btn-secondary btn-sm" id="alm-detalle-btn">Recalcular</button></div><div class="card__body alm-sin-pad" id="alm-carpetas"></div></div>
+      <div class="card"><div class="card__header"><h3>Tablas más pesadas (Neon) ${info('tablas')}</h3><span class="alm-sub">Top 25</span></div><div class="card__body alm-sin-pad" id="alm-tablas"></div></div>
+      <div class="card"><div class="card__header"><h3>Carpetas de Cloudinary ${info('carpetas')}</h3><button class="btn btn-secondary btn-sm" id="alm-detalle-btn">Recalcular</button></div><div class="card__body alm-sin-pad" id="alm-carpetas"></div></div>
     </div>
     <div class="alm-grid">
-      <div class="card"><div class="card__header"><h3>Archivos más pesados</h3></div><div class="card__body alm-sin-pad" id="alm-pesados"></div></div>
-      <div class="card"><div class="card__header"><h3>Subidos recientemente</h3></div><div class="card__body alm-sin-pad" id="alm-recientes"></div></div>
+      <div class="card"><div class="card__header"><h3>Archivos más pesados ${info('pesados')}</h3></div><div class="card__body alm-sin-pad" id="alm-pesados"></div></div>
+      <div class="card"><div class="card__header"><h3>Subidos recientemente ${info('recientes')}</h3></div><div class="card__body alm-sin-pad" id="alm-recientes"></div></div>
     </div>`;
   document.getElementById('alm-intervalo').addEventListener('change', e => { st.intervalo = Number(e.target.value); programar(); pintarVivo(); });
   document.getElementById('alm-refrescar').addEventListener('click', () => cargarTodo(true));
   document.getElementById('alm-detalle-btn').addEventListener('click', () => cargarCloud(true, true));
+  const tras = () => cargarCloud(true, true);
+  if (!c.dataset.almClic) c.dataset.almClic = '1', c.addEventListener('click', e => {
+    if (e.target.closest('.alm-i') || e.target.closest('a')) return;
+    const t = e.target.closest('[data-explorar]');
+    if (t) return abrirExplorador({ tipo: t.dataset.explorar, alEliminar: tras });
+    const f = e.target.closest('[data-carpeta]');
+    if (f) return abrirExplorador({ carpeta: f.dataset.carpeta, alEliminar: tras });
+    const a = e.target.closest('[data-archivo]');
+    if (a) return abrirExplorador({ publicId: a.dataset.archivo, alEliminar: tras });
+  });
   pintarTodo();
   cargarTodo(false);
   programar();
@@ -140,12 +204,12 @@ function pintarKpis() {
   if (!el) return;
   const n = st.neon, c = st.cloud;
   const p = proyeccionCreditos();
-  const kpi = (label, valor, hint, color, ic) => `<div class="kpi-card"><div><div class="kpi-card__label">${label}</div><div class="kpi-card__value">${valor}</div><div class="kpi-card__hint">${hint}</div></div><div class="kpi-card__icon ${color}">${icon(ic)}</div></div>`;
+  const kpi = (label, valor, hint, color, ic, inf) => `<div class="kpi-card"><div><div class="kpi-card__label">${label} ${info(inf)}</div><div class="kpi-card__value">${valor}</div><div class="kpi-card__hint">${hint}</div></div><div class="kpi-card__icon ${color}">${icon(ic)}</div></div>`;
   el.innerHTML = [
-    kpi('Neon usado', n ? tam(n.bytes) : '—', n ? `${n.porcentaje}% de ${tam(n.limite_bytes)} del plan` : (st.errorNeon ? 'Sin conexión' : 'Cargando…'), n ? pctColor(n.porcentaje) : 'gray', 'database'),
-    kpi('Créditos Cloudinary', c?.creditos ? `${Number(c.creditos.usage).toFixed(2)} / ${c.creditos.limit}` : '—', c?.creditos ? `${Number(c.creditos.used_percent).toFixed(1)}% del mes${p ? ` · proyección fin de mes ${p.fin.toFixed(1)}` : ''}` : (st.errorCloud ? 'Sin conexión' : 'Cargando…'), c?.creditos ? pctColor(c.creditos.used_percent) : 'gray', 'cloud'),
-    kpi('Archivos en Cloudinary', c ? tam(c.almacenamiento?.usage) : '—', c ? `${num(c.objetos)} objetos · ${num(c.recursos)} originales` : '—', 'blue', 'grid'),
-    kpi('Conexiones a Neon', n ? `${n.conexiones.total}` : '—', n ? `${n.conexiones.activas} activas · máx. ${n.conexiones.max} · ${n.latencia_ms} ms` : '—', 'gray', 'activity'),
+    kpi('Neon usado', n ? tam(n.bytes) : '—', n ? `${n.porcentaje}% de ${tam(n.limite_bytes)} del plan` : (st.errorNeon ? 'Sin conexión' : 'Cargando…'), n ? pctColor(n.porcentaje) : 'gray', 'database', 'neonUsado'),
+    kpi('Créditos Cloudinary', c?.creditos ? `${Number(c.creditos.usage).toFixed(2)} / ${c.creditos.limit}` : '—', c?.creditos ? `${Number(c.creditos.used_percent).toFixed(1)}% del mes${p ? ` · proyección fin de mes ${p.fin.toFixed(1)}` : ''}` : (st.errorCloud ? 'Sin conexión' : 'Cargando…'), c?.creditos ? pctColor(c.creditos.used_percent) : 'gray', 'cloud', 'creditos'),
+    kpi('Archivos en Cloudinary', c ? tam(c.almacenamiento?.usage) : '—', c ? `${num(c.objetos)} objetos · ${num(c.recursos)} originales` : '—', 'blue', 'grid', 'archivosCloud'),
+    kpi('Conexiones a Neon', n ? `${n.conexiones.total}` : '—', n ? `${n.conexiones.activas} activas · máx. ${n.conexiones.max} · ${n.latencia_ms} ms` : '—', 'gray', 'activity', 'conexiones'),
   ].join('');
 }
 
@@ -201,16 +265,16 @@ function pintarNeon() {
     <div class="alm-uso"><div><strong>${tam(n.bytes)}</strong> de ${tam(n.limite_bytes)}</div><span class="badge badge-${pctColor(n.porcentaje) === 'red' ? 'red' : pctColor(n.porcentaje) === 'amber' ? 'amber' : 'green'}">${n.porcentaje}%</span></div>
     ${barra(n.porcentaje)}
     <div class="alm-stats">
-      <div><b>${n.cache_hit ?? '—'}%</b><span>lecturas desde caché</span></div>
-      <div><b>${n.conexiones.activas}/${n.conexiones.total}</b><span>conexiones activas</span></div>
-      <div><b>${n.latencia_ms} ms</b><span>latencia</span></div>
-      <div><b>${num(n.commits)}</b><span>transacciones</span></div>
+      <div><b>${n.cache_hit ?? '—'}%</b><span>lecturas desde caché ${info('cache')}</span></div>
+      <div><b>${n.conexiones.activas}/${n.conexiones.total}</b><span>conexiones activas ${info('conActivas')}</span></div>
+      <div><b>${n.latencia_ms} ms</b><span>latencia ${info('latencia')}</span></div>
+      <div><b>${num(n.commits)}</b><span>transacciones ${info('transacciones')}</span></div>
     </div>
-    <div class="alm-titulo">En vivo</div>
+    <div class="alm-titulo">En vivo ${info('enVivo')}</div>
     ${sparkline(st.muestras)}
-    <div class="alm-titulo">Por esquema (módulo)</div>
+    <div class="alm-titulo">Por esquema (módulo) ${info('esquemas')}</div>
     ${n.esquemas.map(e => `<div class="alm-fila">
-      <span class="alm-fila__nombre">${escapeHtml(e.esquema)}<small>${num(e.tablas)} tablas · ${num(e.filas)} filas</small></span>
+      <span class="alm-fila__nombre">${escapeHtml(e.esquema)} ${infoModulo(e.esquema)}<small>${escapeHtml(nombreModulo(e.esquema))} · ${num(e.tablas)} tablas · ${num(e.filas)} filas</small></span>
       <div class="alm-fila__barra">${barra(Number(e.bytes) / maxE * 100, 'blue')}</div>
       <span class="alm-fila__val">${tam(e.bytes)}</span></div>`).join('')}
     <p class="alm-nota">Tamaño de los datos e índices de la base. Neon factura además el historial de cambios (WAL), que puede sumar algo más en su consola.</p>`;
@@ -225,27 +289,28 @@ function pintarCloud() {
   if (sub) sub.textContent = `Plan ${c.plan || '—'} · cifras de Cloudinary al ${c.actualizado_por_cloudinary || '—'}`;
   const cr = c.creditos || { usage: 0, limit: 0, used_percent: 0 };
   const det = [
-    ['Almacenamiento', c.almacenamiento, tam(c.almacenamiento?.usage)],
-    ['Ancho de banda (mes)', c.ancho_banda, tam(c.ancho_banda?.usage)],
-    ['Transformaciones', c.transformaciones, num(c.transformaciones?.usage)],
+    ['Almacenamiento', c.almacenamiento, tam(c.almacenamiento?.usage), 'almacenamiento'],
+    ['Ancho de banda (mes)', c.ancho_banda, tam(c.ancho_banda?.usage), 'anchoBanda'],
+    ['Transformaciones', c.transformaciones, num(c.transformaciones?.usage), 'transformaciones'],
   ];
   const tipos = c.detalle?.por_tipo || [];
   const nombreTipo = { image: 'Imágenes', raw: 'Documentos', video: 'Videos' };
   el.innerHTML = `
     <div class="alm-uso"><div><strong>${Number(cr.usage).toFixed(2)}</strong> de ${cr.limit} créditos del mes</div><span class="badge badge-${pctColor(cr.used_percent) === 'red' ? 'red' : pctColor(cr.used_percent) === 'amber' ? 'amber' : 'green'}">${Number(cr.used_percent).toFixed(1)}%</span></div>
     ${barra(cr.used_percent)}
-    <div class="alm-titulo">En qué se gastan los créditos</div>
-    ${det.map(([t, d, v]) => `<div class="alm-fila">
-      <span class="alm-fila__nombre">${t}<small>${v}</small></span>
+    <div class="alm-titulo">En qué se gastan los créditos ${info('creditos')}</div>
+    ${det.map(([t, d, v, k]) => `<div class="alm-fila">
+      <span class="alm-fila__nombre">${t} ${info(k)}<small>${v}</small></span>
       <div class="alm-fila__barra">${barra(cr.limit ? (d?.credits_usage || 0) / cr.limit * 100 : 0, 'blue')}</div>
       <span class="alm-fila__val">${Number(d?.credits_usage || 0).toFixed(2)} cr</span></div>`).join('')}
-    ${tipos.length ? `<div class="alm-titulo">Por tipo de archivo</div><div class="alm-stats">${tipos.map(t => `<div><b>${tam(t.bytes)}</b><span>${nombreTipo[t.tipo] || t.tipo} · ${num(t.archivos)}</span></div>`).join('')}</div>` : ''}
+    ${tipos.length ? `<div class="alm-titulo">Por tipo de archivo · clic para ver los archivos</div><div class="alm-stats">${tipos.map(t => `<div class="alm-clic" data-explorar="${t.tipo}" title="Ver ${nombreTipo[t.tipo] || t.tipo}"><b>${tam(t.bytes)}</b><span>${nombreTipo[t.tipo] || t.tipo} · ${num(t.archivos)} ${info(t.tipo)}</span></div>`).join('')}</div>` : ''}
     <div class="alm-stats">
-      <div><b>${num(c.objetos)}</b><span>objetos (con derivados)</span></div>
-      <div><b>${num(c.solicitudes)}</b><span>solicitudes del mes</span></div>
-      <div><b>${c.rate_limit?.restante ?? '—'}/${c.rate_limit?.permitido ?? '—'}</b><span>consultas API disponibles (hora)</span></div>
-      <div><b>${tam(c.limites?.image_max_size_bytes)}</b><span>máx. por imagen</span></div>
+      <div class="alm-clic" data-explorar="" title="Ver todos los archivos"><b>${num(c.objetos)}</b><span>objetos (con derivados) ${info('objetos')}</span></div>
+      <div><b>${num(c.solicitudes)}</b><span>solicitudes del mes ${info('solicitudes')}</span></div>
+      <div><b>${c.rate_limit?.restante ?? '—'}/${c.rate_limit?.permitido ?? '—'}</b><span>consultas API disponibles (hora) ${info('rateLimit')}</span></div>
+      <div><b>${tam(c.limites?.image_max_size_bytes)}</b><span>máx. por imagen ${info('maxImagen')}</span></div>
     </div>
+    <button type="button" class="btn btn-primary btn-sm alm-explorar" data-explorar="">${icon('cloud')} Explorar y administrar archivos</button>
     <p class="alm-nota">1 crédito = 1 GB guardado, 1 GB de ancho de banda o 1 000 transformaciones. Los créditos se reinician cada mes; Cloudinary actualiza estas cifras una vez al día.</p>`;
 }
 
@@ -254,8 +319,8 @@ function pintarTablas() {
   if (!el) return;
   const t = st.neon?.tablas;
   if (!t) { el.innerHTML = '<div class="alm-vacio">Cargando…</div>'; return; }
-  el.innerHTML = `<div class="table-wrap"><table><thead><tr><th>Tabla</th><th>Filas</th><th>Datos</th><th>Índices</th><th>Total</th><th>Limpieza</th></tr></thead><tbody>
-    ${t.map(x => `<tr><td><b>${escapeHtml(x.tabla)}</b><div class="alm-sub">${escapeHtml(x.esquema)}</div></td><td>${num(x.filas)}${Number(x.filas_muertas) ? `<div class="alm-sub">${num(x.filas_muertas)} eliminadas</div>` : ''}</td>
+  el.innerHTML = `<div class="table-wrap"><table><thead><tr><th>Tabla</th><th>Filas ${info('filas')}</th><th>Datos ${info('datos')}</th><th>Índices ${info('indices')}</th><th>Total ${info('total')}</th><th>Limpieza ${info('limpieza')}</th></tr></thead><tbody>
+    ${t.map(x => `<tr><td><b>${escapeHtml(x.tabla)}</b><div class="alm-sub">${escapeHtml(x.esquema)} · ${escapeHtml(nombreModulo(x.esquema))} ${infoModulo(x.esquema)}</div></td><td>${num(x.filas)}${Number(x.filas_muertas) ? `<div class="alm-sub">${num(x.filas_muertas)} eliminadas</div>` : ''}</td>
       <td>${tam(x.datos)}</td><td>${tam(x.indices)}</td><td><b>${tam(x.bytes)}</b></td><td class="alm-sub">${x.ultimo_vacuum ? formatDateTime(x.ultimo_vacuum) : '—'}</td></tr>`).join('')}
   </tbody></table></div>`;
 }
@@ -268,7 +333,7 @@ function pintarCarpetas() {
   if (!d) { el.innerHTML = `<div class="alm-vacio">${escapeHtml(st.cloud?.detalle_error || 'Sin detalle todavía.')}</div>`; return; }
   const max = Math.max(...d.carpetas.map(x => x.bytes), 1);
   el.innerHTML = `<div class="alm-pad"><div class="alm-sub" style="margin-bottom:8px">${num(d.total_archivos)} archivos · ${tam(d.total_bytes)} · calculado ${hora(d.generado)}${st.cargandoDetalle ? ' · recalculando…' : ''}</div>
-    ${d.carpetas.map(x => `<div class="alm-fila">
+    ${d.carpetas.map(x => `<div class="alm-fila alm-clic" data-carpeta="${escapeHtml(x.carpeta)}" title="Ver los archivos de esta carpeta">
       <span class="alm-fila__nombre">${escapeHtml(x.carpeta)}<small>${num(x.archivos)} archivos${x.imagenes ? ` · ${x.imagenes} img` : ''}${x.documentos ? ` · ${x.documentos} doc` : ''}${x.videos ? ` · ${x.videos} video` : ''}</small></span>
       <div class="alm-fila__barra">${barra(x.bytes / max * 100, /^samples/.test(x.carpeta) ? 'amber' : 'blue')}</div>
       <span class="alm-fila__val">${tam(x.bytes)}</span></div>`).join('')}</div>`;
@@ -277,7 +342,7 @@ function pintarCarpetas() {
 function filaArchivo(x) {
   const nombre = String(x.public_id).split('/').pop();
   const carpeta = String(x.public_id).split('/').slice(0, -1).join('/') || '(raíz)';
-  return `<tr><td><b>${escapeHtml(nombre)}</b><div class="alm-sub">${escapeHtml(carpeta)}</div></td>
+  return `<tr class="alm-clic" data-archivo="${escapeHtml(x.public_id)}" title="Ver detalle y dónde se usa"><td><b>${escapeHtml(nombre)}</b><div class="alm-sub">${escapeHtml(carpeta)}</div></td>
     <td><span class="badge badge-gray">${escapeHtml(x.tipo === 'image' ? 'imagen' : x.tipo === 'raw' ? 'documento' : x.tipo)}${x.formato ? ' · ' + escapeHtml(x.formato) : ''}</span></td>
     <td><b>${tam(x.bytes)}</b></td><td class="alm-sub">${formatDateTime(x.creado)}</td>
     <td>${x.url ? `<a href="${escapeHtml(x.url)}" target="_blank" rel="noopener noreferrer" class="btn btn-secondary btn-sm">${icon('external-link')}</a>` : ''}</td></tr>`;
@@ -377,6 +442,13 @@ function estilos() {
   .alm-nota { font-size: 11.5px; color: var(--text-muted); margin: 12px 0 0; }
   .alm-vacio { text-align: center; color: var(--text-muted); font-size: 13px; padding: 26px 16px; }
   #alm-tablas td:not(:first-child), #alm-pesados td:not(:first-child), #alm-recientes td:not(:first-child) { white-space: nowrap; }
+  .alm-i { display: inline-flex; align-items: center; justify-content: center; width: 15px; height: 15px; border-radius: 50%; border: 1px solid #c7d2fe; background: var(--primary-light); color: var(--primary); font: italic 700 10px Georgia, serif; cursor: help; padding: 0; margin-left: 3px; vertical-align: middle; text-transform: none; letter-spacing: 0; }
+  .alm-i:hover { background: var(--primary); color: #fff; }
+  .alm-pop { position: fixed; z-index: 2000; max-width: 300px; background: #111827; color: #f9fafb; font-size: 12.5px; line-height: 1.45; font-weight: 500; padding: 9px 12px; border-radius: 9px; box-shadow: var(--shadow-md); text-transform: none; letter-spacing: 0; }
+  .alm-clic { cursor: pointer; transition: background .15s, box-shadow .15s; }
+  .alm-stats > .alm-clic:hover { background: var(--primary-light); box-shadow: inset 0 0 0 1px #c7d2fe; }
+  .alm-fila.alm-clic:hover, tr.alm-clic:hover td { background: var(--gray-bg); }
+  .alm-explorar { margin-top: 12px; width: 100%; justify-content: center; }
   .alm-leyenda { display: flex; gap: 16px; font-size: 12px; color: var(--text-muted); margin-bottom: 6px; }
   .alm-leyenda i { display: inline-block; width: 14px; height: 3px; border-radius: 2px; margin-right: 6px; vertical-align: middle; }`;
   document.head.appendChild(s);
