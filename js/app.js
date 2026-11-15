@@ -36,6 +36,7 @@ window.navigateToView = navigateTo;
 
 function renderView(name) {
   if (!VIEWS[name]) name = 'dashboard';
+  if (window.__seccionPrevia !== name) { window.__seccionPrevia = name; window.scrollTo(0, 0); document.querySelectorAll('main, .main, .content, .main-content').forEach(e => { if (e.scrollTop) e.scrollTop = 0; }); } // nueva sección → arriba
 
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
   document.getElementById(`view-${name}`).classList.add('active');
