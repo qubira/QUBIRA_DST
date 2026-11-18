@@ -4,6 +4,8 @@ import { icon, escapeHtml } from './utils.js';
 
 const OWN_AREA = 'DST';
 const AREAS = [['DST','DST'],['ADG','ADG'],['TI','OTI'],['RRHH','ORH'],['SOPORTE','Soporte'],['COMERCIAL','Comercial'],['OPP','OPP']];
+// Áreas desde el catálogo de ORH (fuente única); esta lista queda solo como respaldo
+(window.__qbListasAreas ||= []).push([AREAS, 'DST']);
 const MEETING_TYPES = ['Revisión de seguridad','Auditoría','Gestión de incidentes','Coordinación con otra área','Capacitación','Otro'];
 const EXTERNAL_KINDS = [['cliente','Cliente'],['postulante','Postulante'],['proveedor','Proveedor'],['consultor','Consultor'],['otro','Otro']];
 const STATUS_LABEL = { scheduled:'Programada', confirmed:'Confirmada', in_progress:'En curso', completed:'Finalizada', cancelled:'Cancelada' };
