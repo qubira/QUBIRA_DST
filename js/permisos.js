@@ -114,7 +114,10 @@ async function selectUser(user) {
 
 function renderEditor(user, history) {
   const editor = document.getElementById('perm-editor');
-  const area = (user.area || '').toUpperCase();
+  // El catálogo muestra la sigla (OTI, OCOS, ORH…); el módulo usa la clave interna (TI, SOPORTE, RRHH…)
+  const CLAVE = { OTI: 'TI', OCOS: 'SOPORTE', ORH: 'RRHH', ODN: 'COMERCIAL', ACM: 'OCM', DJ: 'ODACL', CG: 'OPP' };
+  const area0 = (user.area || '').trim().toUpperCase();
+  const area = CLAVE[area0] || area0;
   editor.innerHTML = `
     <p style="font-size:12.5px;color:var(--text-muted);margin:0 0 10px">
       El módulo de su área (si tiene) se otorga automáticamente y no se puede quitar aquí. Los demás son adicionales.
