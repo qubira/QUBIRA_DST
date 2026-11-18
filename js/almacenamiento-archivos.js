@@ -11,7 +11,7 @@ export const MODULOS = {
   security: ['Seguridad (DST)', 'Sesiones, intentos de inicio de sesión, IPs, bloqueos 2FA, geolocalización y las fotos del control de almacenamiento.'],
   odacl: ['ODACL', 'Documentos legales, plantillas oficiales, información societaria, contratos externos, consultas legales y matriz de riesgos.'],
   public: ['Núcleo del sistema', 'Usuarios, cuentas, módulos autorizados y datos compartidos por todos los paneles.'],
-  rrhh: ['RR. HH.', 'Trabajadores, áreas, cargos, contratos laborales, constancias y catálogos de personal.'],
+  rrhh: ['ORH', 'Trabajadores, áreas, cargos, contratos laborales, constancias y catálogos de personal.'],
   comercial: ['Comercial (ODN)', 'Clientes, representantes, proformas y sus versiones, y contratos comerciales.'],
   calendar: ['Calendario corporativo', 'Reuniones de todas las áreas y sus participantes.'],
   analytics: ['Visitas del sitio', 'Sesiones y eventos de navegación del sitio público de QUBIRA.'],
