@@ -5,6 +5,7 @@ import { toast } from './ui.js';
 const MODULES = [
   ['TI', 'OTI'],
   ['ADG', 'ADG'],
+  ['GG', 'GG'],
   ['RRHH', 'ORH'],
   ['SOPORTE', 'Soporte'],
   ['COMERCIAL', 'Comercial'],
