@@ -2,6 +2,7 @@ import { Store } from './storage.js';
 import { renderDashboard } from './dashboard.js';
 import { renderCalendario } from './calendario.js';
 import { renderJerarquia } from './jerarquia.js';
+import { renderPendientes } from './pendientes.js';
 import { renderVisitas } from './visitas.js';
 import { renderUsuarios } from './usuarios.js';
 import { renderPermisos } from './permisos.js';
@@ -17,6 +18,7 @@ import { renderAlmacenamiento } from './almacenamiento.js';
 const VIEWS = {
   dashboard: { render: renderDashboard, title: 'Dashboard', subtitle: 'Resumen de seguridad del ecosistema Qubira' },
   calendario: { render: renderCalendario, title: 'Calendario', subtitle: 'Reuniones de DST e interconexión con otras áreas' },
+  pendientes: { render: renderPendientes, title: 'Pendientes', subtitle: 'Actas de seguridad y documentos que te toca revisar o aprobar' },
   jerarquia: { render: renderJerarquia, title: 'Mapa jerárquico', subtitle: 'Niveles, cargos, funciones y comunicación entre las áreas de QUBIRA' },
   visitas: { render: renderVisitas, title: 'Visitas', subtitle: 'Cómo interactúan los visitantes con el sitio público de QUBIRA' },
   usuarios: { render: renderUsuarios, title: 'Usuarios', subtitle: 'Cuentas del sistema, estado y accesos' },
