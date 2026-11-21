@@ -11,6 +11,7 @@ const MODULES = [
   ['COMERCIAL', 'Comercial'],
   ['OPP', 'OPP'],
   ['DST', 'DST'],
+  ['ON', 'ON · Oficina Notarial'],
 ];
 
 let _users = [];
